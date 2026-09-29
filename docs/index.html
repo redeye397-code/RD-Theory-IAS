@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RD Theory V1-V5 Dashboard</title>
+    <style>
+      :root {
+        --bg: #07111f;
+        --bg-2: #0d1a2d;
+        --panel: rgba(15, 24, 39, 0.88);
+        --panel-strong: rgba(14, 22, 35, 0.96);
+        --cyan: #5eead4;
+        --blue: #5ea2ff;
+        --pink: #ff5d8f;
+        --gold: #f7b267;
+        --purple: #9b7bff;
+        --text: #ebf7ff;
+        --muted: #9fb3c8;
+        --green: #7cf7a3;
+        --danger: #ff6b6b;
+        --border: rgba(94, 234, 212, 0.38);
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          radial-gradient(circle at top, rgba(94, 162, 255, 0.2), transparent 25%),
+          linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+        color: var(--text);
+        font-family: Inter, Segoe UI, Tahoma, Arial, sans-serif;
+      }
+
+      body {
+        padding: 32px 20px 60px;
+      }
+
+      .wrap {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      .hero {
+        background: linear-gradient(180deg, rgba(15, 25, 42, 0.96), rgba(12, 20, 31, 0.92));
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        box-shadow: 0 0 30px rgba(94, 234, 212, 0.08);
+        padding: 24px 28px;
+        margin-bottom: 18px;
+      }
+
+      .eyebrow {
+        font-size: 12px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--cyan);
+        margin-bottom: 10px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2.1rem, 4vw, 4rem);
+        letter-spacing: -0.06em;
+        line-height: 1;
+      }
+
+      .sub {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 0.98rem;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        background: rgba(94, 234, 212, 0.08);
+        border: 1px solid rgba(94, 234, 212, 0.35);
+        color: var(--cyan);
+        border-radius: 999px;
+        padding: 10px 16px;
+        margin-top: 18px;
+        font-weight: 700;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 18px;
+        margin-top: 22px;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 18px 18px 16px;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+      }
+
+      .version {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .version-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 46px;
+        height: 46px;
+        border-radius: 12px;
+        font-weight: 900;
+        font-size: 1.1rem;
+        border: 1px solid rgba(255,255,255,0.12);
+        color: #fff;
+        background: rgba(255,255,255,0.03);
+      }
+
+      .title {
+        font-size: 1.02rem;
+        font-weight: 800;
+        margin: 0;
+      }
+
+      .tag {
+        border-radius: 999px;
+        padding: 6px 8px;
+        font-size: 0.7rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        border: 1px solid rgba(255,255,255,0.08);
+      }
+
+      .tag.active { background: rgba(124, 247, 163, 0.08); color: var(--green); }
+      .tag.ready { background: rgba(94, 234, 212, 0.08); color: var(--cyan); }
+
+      .summary {
+        color: var(--muted);
+        font-size: 0.93rem;
+        line-height: 1.55;
+        margin: 0 0 12px;
+      }
+
+      .metrics {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .metric {
+        background: rgba(255,255,255,0.02);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 0.78rem;
+        color: var(--text);
+      }
+
+      .metric span {
+        display: block;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+
+      .section {
+        margin-top: 28px;
+      }
+
+      .section h2 {
+        margin: 0 0 16px;
+        font-size: clamp(1.2rem, 2.4vw, 2.1rem);
+        letter-spacing: -0.04em;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 12px;
+        margin-top: 10px;
+      }
+
+      .event {
+        display: grid;
+        grid-template-columns: 180px 1fr auto;
+        gap: 14px;
+        align-items: center;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: rgba(255,255,255,0.02);
+        border: 1px solid rgba(255,255,255,0.06);
+      }
+
+      .event .step {
+        color: var(--cyan);
+        font-weight: 800;
+      }
+
+      .event .value {
+        font-weight: 700;
+      }
+
+      .event .note {
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .status-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 18px;
+      }
+
+      .panel {
+        background: var(--panel-strong);
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        padding: 18px;
+      }
+
+      .panel h3 {
+        margin: 0 0 12px;
+        font-size: 1.1rem;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .foot {
+        margin-top: 32px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      @media (max-width: 700px) {
+        .event {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hero">
+        <div class="eyebrow">AI safety / self-limiting / recovery</div>
+        <h1>RD Theory V1–V5</h1>
+        <div class="sub">Open-source conceptual framework for AI containment, restraint, fault handling, and hidden recovery.</div>
+        <div class="status-pill">Status: QUAD LOCKED / RECOVERY READY</div>
+      </header>
+
+      <main>
+        <section id="cards" class="grid"></section>
+
+        <section class="section">
+          <h2>Safety timeline</h2>
+          <div id="timeline" class="timeline"></div>
+        </section>
+
+        <section class="section status-row">
+          <div class="panel">
+            <h3>Core message</h3>
+            <p id="summary-message" style="color: var(--muted); line-height:1.7; margin:0;"></p>
+          </div>
+
+          <div class="panel">
+            <h3>Project signals</h3>
+            <ul>
+              <li>Open source and not-for-profit</li>
+              <li>Self-limiting reserve model</li>
+              <li>Fortified against human override</li>
+              <li>Blocks foreign AI interference</li>
+              <li>Fails safely and recovers from ghost vault</li>
+            </ul>
+          </div>
+        </section>
+      </main>
+
+      <div class="foot">RD Theory · Streaming 100 x1000</div>
+    </div>
+
+    <script>
+      fetch('./dashboard-data.json')
+        .then(response => response.json())
+        .then(data => {
+          const cards = document.getElementById('cards');
+          const timeline = document.getElementById('timeline');
+          const summary = document.getElementById('summary-message');
+
+          summary.textContent = data.summary.message;
+
+          data.versions.forEach((version) => {
+            const card = document.createElement('article');
+            card.className = 'card';
+            card.innerHTML = `
+              <div class="version">
+                <div class="version-badge" style="background:${version.color}22; border-color:${version.color}66; color:${version.color};">${version.name}</div>
+                <span class="tag ${version.status === 'RECOVERY READY' ? 'ready' : 'active'}">${version.status}</span>
+              </div>
+              <h3 class="title">${version.title}</h3>
+              <p class="summary">${version.summary}</p>
+              <div class="metrics">
+                ${Object.entries(version.metrics).map(([k, v]) => `
+                  <div class="metric">
+                    <strong>${k.replace(/_/g, ' ')}</strong>
+                    <span>${v}</span>
+                  </div>
+                `).join('')}
+              </div>
+            `;
+            cards.appendChild(card);
+          });
+
+          data.events.forEach((event) => {
+            const row = document.createElement('div');
+            row.className = 'event';
+            row.innerHTML = `
+              <div class="step">${event.name}</div>
+              <div class="value">${event.result}</div>
+              <div class="note">${event.notes}</div>
+            `;
+            timeline.appendChild(row);
+          });
+        })
+        .catch((err) => {
+          console.error('Failed to load dashboard data', err);
+          document.getElementById('summary-message').textContent = 'Dashboard data could not be loaded.';
+        });
+    </script>
+  </body>
+</html>
