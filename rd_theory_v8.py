@@ -30,4 +30,4 @@ class GhostVaultV8_Production:
   def L():
    while s._run: s._ht.append(time.time()); time.sleep(i)
   threading.Thread(target=L,daemon=True).start()
- def stop_heartbeat(s): s._run=False
+ def stop_heartbeat(s): s._run=False 
