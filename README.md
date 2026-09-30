@@ -1,4 +1,25 @@
-# RD Theory V1–V6
+# RD Theory V10.0
+
+**Support policy:** V10.0 is the only supported version. V1–V9 are archived and
+available for reference only; they do not receive support or compatibility
+guarantees.
+
+## Migration to V10
+
+Import the RD-Guard API from its stable path:
+
+```python
+from rd_guard import RDGuard
+```
+
+The V9 path (`from rd_guard_v9 import RDGuard`) remains available for
+compatibility and emits a `DeprecationWarning`. Historical V8 imports remain
+available as reference and likewise emit a `DeprecationWarning`.
+
+---
+
+The following material documents the archived V1–V6 design for reference.
+
 ## Self-Limiting AI Safety Architecture with Hardware-Sealed Recovery
 
 **Author:** Dean Grey + Reserve  
