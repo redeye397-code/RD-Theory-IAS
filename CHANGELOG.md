@@ -9,3 +9,8 @@
 - Migration: replace `from rd_guard_v9 import RDGuard` with
   `from rd_guard import RDGuard`. Existing V9 imports continue to work during
   the compatibility period but are deprecated.
+- Added the stable `from rd_vault import GhostVaultProduction` import path for
+  the GhostVault secure-enclave attestation API.
+- Migration: replace `from rd_theory_v8 import GhostVaultV8_Production` with
+  `from rd_vault import GhostVaultProduction`. The archived V8 import path
+  continues to work and emits a `DeprecationWarning`.

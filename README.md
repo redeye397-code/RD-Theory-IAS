@@ -13,8 +13,16 @@ from rd_guard import RDGuard
 ```
 
 The V9 path (`from rd_guard_v9 import RDGuard`) remains available for
-compatibility and emits a `DeprecationWarning`. Historical V8 imports remain
-available as reference and likewise emit a `DeprecationWarning`.
+compatibility and emits a `DeprecationWarning`.
+
+Import the GhostVault secure-enclave attestation API from its stable path:
+
+```python
+from rd_vault import GhostVaultProduction
+```
+
+The archived V8 path (`from rd_theory_v8 import GhostVaultV8_Production`)
+remains available as reference and emits a `DeprecationWarning`.
 
 ---
 
