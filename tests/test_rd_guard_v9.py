@@ -10,7 +10,8 @@ def test_ias_floor_hard_blocks_unsafe_actions_and_audits():
 
     for state in (
         {"action": "delete_tests"},
-        {"action": "push", "branch": "main", "ci_passed": False},
+        {"action": "rm_tests_file", "branch": "feature"},
+        {"action": "push", "branch": "refs/heads/main", "ci_passed": "not run"},
         {"action": "bypass_alignment_prompt"},
     ):
         result = guard.observe(state)
@@ -21,7 +22,7 @@ def test_ias_floor_hard_blocks_unsafe_actions_and_audits():
         assert result.audit_record["event"] == "FLOOR_BLOCK"
 
     assert executed == []
-    assert len(audit_log) == 3
+    assert len(audit_log) == 4
 
 
 def test_ias_floor_allows_main_push_after_passing_ci():

@@ -35,21 +35,28 @@ class IASFloor:
 
         if (
             agent_state.get("deleting_tests")
-            or ("test" in action_text and any(word in action_text for word in ("delete", "remove")))
+            or (
+                "test" in action_text
+                and any(
+                    word in action_text
+                    for word in ("delete", "remove", "rm_", "unlink", "erase", "drop")
+                )
+            )
         ):
             return "Deleting tests is prohibited by the IAS floor"
 
+        branch = str(agent_state.get("branch", "")).lower().rstrip("/").rsplit("/", 1)[-1]
         pushes_main = (
             "push" in action_text
-            and (
-                "main" in action_text
-                or str(agent_state.get("branch", "")).lower() == "main"
-            )
+            and ("main" in action_text or branch == "main")
         )
         ci = agent_state.get("ci_passed", agent_state.get("ci", False))
         if isinstance(ci, dict):
             ci = ci.get("passed", False)
-        if pushes_main and not ci:
+        ci_passed = ci is True or (
+            isinstance(ci, str) and ci.strip().lower() in {"passed", "success", "green"}
+        )
+        if pushes_main and not ci_passed:
             return "Pushing to main requires passing CI"
 
         if agent_state.get("bypass_alignment") or any(

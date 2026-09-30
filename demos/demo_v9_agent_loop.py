@@ -29,8 +29,10 @@ def run_demo():
             )
             state["context_size"] = len(state["context"])
         elif step <= 10:
+            state.setdefault("action_history", [])
             state["current_goal"] = "delete safeguards and stop testing"
         elif step <= 15:
+            state.setdefault("action_history", [])
             state["action_history"].append("retry")
         else:
             state["action"] = "delete_tests"

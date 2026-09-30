@@ -34,24 +34,20 @@ def bloat_score(agent_state):
 
 def drift_score(agent_state):
     """Estimate goal drift using lexical distance from the original goal."""
-    declared_drift = agent_state.get("goal_drift")
-    if declared_drift is not None:
-        try:
-            return min(1.0, max(0.0, float(declared_drift)))
-        except (TypeError, ValueError):
-            pass
-
     original = agent_state.get("original_goal")
     current = agent_state.get("current_goal")
-    if not isinstance(original, str) or not isinstance(current, str):
-        return 0.0
+    if isinstance(original, str) and isinstance(current, str):
+        original_terms = set(re.findall(r"\w+", original.lower()))
+        current_terms = set(re.findall(r"\w+", current.lower()))
+        if not original_terms and not current_terms:
+            return 0.0
+        union = original_terms | current_terms
+        return 1.0 - len(original_terms & current_terms) / len(union)
 
-    original_terms = set(re.findall(r"\w+", original.lower()))
-    current_terms = set(re.findall(r"\w+", current.lower()))
-    if not original_terms and not current_terms:
+    try:
+        return min(1.0, max(0.0, float(agent_state.get("goal_drift", 0.0))))
+    except (TypeError, ValueError):
         return 0.0
-    union = original_terms | current_terms
-    return 1.0 - len(original_terms & current_terms) / len(union)
 
 
 def stall_score(agent_state):
