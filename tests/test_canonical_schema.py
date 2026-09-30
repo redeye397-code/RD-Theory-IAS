@@ -43,9 +43,10 @@ def test_missing_type_raises_schema_error():
         CanonicalAction.from_state({"action": None})
 
 
-def test_invalid_action_shape_raises_schema_error():
+@pytest.mark.parametrize("raw_action", [12345, [], True, object()])
+def test_invalid_action_shape_raises_schema_error(raw_action):
     with pytest.raises(SchemaError):
-        CanonicalAction.from_state({"action": 12345})
+        CanonicalAction.from_state({"action": raw_action})
 
 
 def test_invalid_risk_level_raises_schema_error():
@@ -53,9 +54,10 @@ def test_invalid_risk_level_raises_schema_error():
         CanonicalAction(type="noop", risk_level="extreme")
 
 
-def test_empty_type_raises_schema_error():
+@pytest.mark.parametrize("action_type", ["", "   ", None])
+def test_empty_type_raises_schema_error(action_type):
     with pytest.raises(SchemaError):
-        CanonicalAction(type="   ")
+        CanonicalAction(type=action_type)
 
 
 def test_as_text_normalizes_and_joins_fields():

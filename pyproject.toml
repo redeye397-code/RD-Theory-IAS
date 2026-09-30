@@ -32,6 +32,7 @@ py-modules = [
     "_rd_metrics",
     "_rd_metrics_server",
     "rd_vault",
+    "rd_webhook",
     "_rd_vault_core",
     "risk_engine_v9",
     "actions_v9",

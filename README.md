@@ -4,6 +4,35 @@
 and available for reference only; their legacy import paths remain available
 with `DeprecationWarning` notices.
 
+RD Guard is a fail-closed state machine that blocks unsafe code execution when
+actions violate the safety floor, required audit logging is unavailable, or a
+state-machine rule disallows a transition. Use it when you need validated
+actions and fail-closed enforcement in a Python workflow. It is not a
+production-certified security boundary.
+
+## Try RD Guard in 30 seconds
+
+Clone this repository and install the local package:
+
+```bash
+git clone https://github.com/redeye397-code/rd_theory.git
+cd rd_theory
+python -m pip install -e .
+```
+
+Run this short example from the repository root:
+
+```python
+from rd_executor import GuardedExecutor
+guard = GuardedExecutor()
+print(guard.execute({"action": "read_file"}).decision)  # ALLOW
+print(guard.execute({"action": "delete_tests"}).decision)  # BLOCK
+```
+
+Expected output is `ALLOW` followed by `BLOCK`: deleting tests violates the
+IAS safety floor. More detail: [setup](docs/setup.md) and
+[architecture](docs/architecture.md).
+
 ## Migration to V10
 
 Import the RD-Guard API from its stable path:
@@ -141,6 +170,32 @@ The metrics cover:
 
 A ready-to-import Grafana dashboard example is included at
 `examples/grafana/rd_guard_dashboard.json`.
+
+For p95 latency, scrape `/metrics` and query the exported histogram buckets,
+for example:
+
+```promql
+histogram_quantile(
+  0.95,
+  sum(rate(rd_guard_executor_execute_duration_seconds_bucket[5m])) by (le)
+)
+```
+
+This estimates p95 `GuardedExecutor.execute()` latency over a rolling five
+minutes. Compare it with the validation and observation histograms to localize
+cost before making performance changes.
+
+## V11 roadmap
+
+V10.0.0 remains the supported release. The next planned milestone is **V11.2:
+onboarding and product clarity**, followed by safety and performance checks:
+
+- [x] Explain RD Guard's validated, fail-closed action enforcement up front.
+- [x] Provide a local-install command and a runnable allow/block example.
+- [x] Rate-limit optional webhook alerts and test failed/malformed requests.
+- [x] Exercise malformed schema inputs and 10,000 schema evaluations.
+- [ ] Continue reviewing production deployment boundaries and measured
+  latency before adding optimizations.
 
 ## Corrected rate limiting
 
