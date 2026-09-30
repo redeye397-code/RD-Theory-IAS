@@ -3,14 +3,14 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import time
 from prometheus_client import start_http_server
-from rd_guard import Guard
+from rd_guard import RDGuard
 from rd_guard.v11.config import GuardConfig
 from rd_guard.v11.telemetry.logging import get_logger
 
 # 1. Start metrics on :9090 (your Grafana scrapes this)
 start_http_server(9090)
 logger = get_logger("realworld")
-guard = Guard(config=GuardConfig(env="prod"))
+guard = RDGuard(config=GuardConfig(env="prod"))
 
 app = FastAPI(title="RD Guard V11.2.0 — Real World")
 
