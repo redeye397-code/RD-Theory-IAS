@@ -42,7 +42,8 @@ class HSM_TPM_SecureEnclave_Production:
         h = hashlib.sha256(canonical(d).encode()).hexdigest()
         e = {"data": d, "data_hash": h, "hw_id": self.hw_id, "ts": time.time(), "sig": "x"}
         try:
-            open(self._a, "a").write(json.dumps(e) + "\n")
+            with open(self._a, "a") as f:
+                f.write(json.dumps(e) + "\n")
         except OSError:
             pass
         return e
