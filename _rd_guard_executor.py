@@ -47,8 +47,14 @@ class GuardedExecutor:
             self.guard = guard
         else:
             self.guard = RDGuard(
-                audit_log=AuditSink() if audit_log is None else audit_log
+                audit_log=(
+                    audit_log
+                    if isinstance(audit_log, AuditSink)
+                    else AuditSink(backend=audit_log)
+                )
             )
+        if not isinstance(self.guard.audit_log, AuditSink):
+            self.guard.audit_log = AuditSink(backend=self.guard.audit_log)
         self.audit_log = self.guard.audit_log
         self.state_machine = (
             state_machine
@@ -67,6 +73,16 @@ class GuardedExecutor:
         if callable(ensure_available):
             ensure_available()
 
+    def _audit_failure(self, action, error):
+        self.state_machine.enter_fault(f"AUDIT_UNAVAILABLE: {error}")
+        return GuardAction(
+            decision="BLOCK",
+            action=action.type,
+            reason="Audit logging unavailable; high-risk action blocked (fail-closed)",
+            blocked=True,
+            audit_record=None,
+        )
+
     def execute(self, agent_state, run=None):
         """Validate, observe, and (if allowed) execute ``agent_state``'s action.
 
@@ -82,16 +98,14 @@ class GuardedExecutor:
             try:
                 self._ensure_audit_available()
             except AuditWriteError as exc:
-                self.state_machine.enter_fault(f"AUDIT_UNAVAILABLE: {exc}")
-                return GuardAction(
-                    decision="BLOCK",
-                    action=action.type,
-                    reason="Audit logging unavailable; high-risk action blocked (fail-closed)",
-                    blocked=True,
-                    audit_record=None,
-                )
+                return self._audit_failure(action, exc)
 
-        result = self.guard.observe(agent_state)
+        try:
+            result = self.guard.observe(agent_state)
+        except AuditWriteError as exc:
+            if not high_risk:
+                raise
+            return self._audit_failure(action, exc)
 
         if result.decision == "BLOCK":
             self.state_machine.floor_block(result.reason)

@@ -21,6 +21,14 @@ Result: Self-limiting, tamper-resistant, AI-isolated safety model.
 
 from __future__ import annotations
 
+import warnings
+
+warnings.warn(
+    "rd_theory_v4_final is archived; use the supported V10 API from rd_guard.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 
 class RDTheoryV4:
     """RD Theory V4 - Quad Locked Safety Architecture.

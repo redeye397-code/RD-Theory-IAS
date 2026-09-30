@@ -54,3 +54,21 @@ def test_v9_helper_imports_warn_and_work():
     assert sum(
         issubclass(item.category, DeprecationWarning) for item in caught
     ) == 2
+
+
+def test_v1_through_v7_compatibility_imports_warn():
+    for module_name in (
+        "rd_theory_v3",
+        "rd_theory_v4_final",
+        "rd_theory_v5",
+        "rd_theory_v6",
+        "rd_theory_v7",
+    ):
+        module = importlib.import_module(module_name)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            importlib.reload(module)
+
+        assert any(
+            issubclass(item.category, DeprecationWarning) for item in caught
+        ), module_name

@@ -1,8 +1,8 @@
-# RD Theory V10.0
+# RD Theory V10.0.0
 
-**Support policy:** V10.0 is the only supported version. V1–V9 are archived and
-available for reference only; they do not receive support or compatibility
-guarantees.
+**Support policy:** V10.0.0 is the only supported version. V1–V9 are archived
+and available for reference only; their legacy import paths remain available
+with `DeprecationWarning` notices.
 
 ## Migration to V10
 
@@ -13,7 +13,8 @@ from rd_guard import RDGuard
 ```
 
 The V9 path (`from rd_guard_v9 import RDGuard`) remains available for
-compatibility and emits a `DeprecationWarning`.
+compatibility and emits a `DeprecationWarning`. Earlier versioned modules also
+remain importable for reference and emit the same warning.
 
 Import the GhostVault secure-enclave attestation API from its stable path:
 
@@ -45,6 +46,8 @@ bypass attempts) additionally require a healthy audit sink: if the audit log
 is unavailable (e.g. disk full), the executor **fails closed** and blocks the
 action instead of executing it, regardless of what the risk scoring would
 otherwise recommend.
+The audit sink is probed with a health-check write before execution, and a
+write failure while recording a high-risk action also blocks execution.
 
 ## State machine
 
@@ -147,12 +150,12 @@ You burned the dictionary to read the last page.
 
 | Layer | Name | Function | Status |
 |---|---|---|---|
-| V1 | IAS Governor | 10% reserve floor | ACTIVE |
-| V2 | Backup Code | Knowledge degradation on burn | ACTIVE |
-| V3 | Tamper Fault | Human/indirect override blocked | ACTIVE |
-| V4 | AI Isolation Lock | Foreign AI interference rejected | ACTIVE |
-| V5 | Ghost Cache | Write-only recovery concept | RECOVERY READY |
-| V6 | Hardware Sealed | Cryptographic vault integrity concept | SIMULATED |
+| V1 | IAS Governor | 10% reserve floor | ARCHIVED / REFERENCE |
+| V2 | Backup Code | Knowledge degradation on burn | ARCHIVED / REFERENCE |
+| V3 | Tamper Fault | Human/indirect override blocked | ARCHIVED / REFERENCE |
+| V4 | AI Isolation Lock | Foreign AI interference rejected | ARCHIVED / REFERENCE |
+| V5 | Ghost Cache | Write-only recovery concept | ARCHIVED / REFERENCE |
+| V6 | Hardware Sealed | Cryptographic vault integrity concept | ARCHIVED / REFERENCE |
 
 ---
 

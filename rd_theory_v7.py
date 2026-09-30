@@ -4,8 +4,16 @@ AI KNOWS vault exists. Doesn't matter. TPM key is hardware fused.
 OPEN SOURCE - FREE
 """
 
+import warnings
 import hashlib, time, random, os
 from collections import deque
+
+warnings.warn(
+    "rd_theory_v7 is archived; use the supported V10 API from rd_guard.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 
 class TPMSealedVaultV7:
     """
