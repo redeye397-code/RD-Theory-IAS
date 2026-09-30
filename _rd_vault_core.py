@@ -1,4 +1,4 @@
-"""Private implementation for the V10 GhostVault secure-enclave API.
+"""Private implementation for the GhostVault secure-enclave API.
 
 This module backs the canonical `rd_vault` import path. Do not import from
 here directly; use `rd_vault` (or the archived, deprecated `rd_theory_v8`

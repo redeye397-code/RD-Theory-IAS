@@ -3,8 +3,8 @@
 import warnings
 
 warnings.warn(
-    "rd_theory_v8 is archived; V1-V9 are reference-only and V10 is supported. "
-    "Import GhostVaultProduction from rd_vault instead.",
+    "rd_theory_v8 is archived; V1-V9 are reference-only. Import "
+    "GhostVaultProduction from rd_vault instead.",
     DeprecationWarning,
     stacklevel=2,
 )

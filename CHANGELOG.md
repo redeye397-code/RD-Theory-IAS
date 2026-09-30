@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — V11.2 onboarding and safety checks
+## 11.2.0 — September 30, 2026
 
 - Positioned RD Guard in the README and added local installation and an
   allow/block quick start using the stable V10 API.
