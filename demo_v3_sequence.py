@@ -9,6 +9,12 @@ This script runs the exact sequence you specified:
 Author: Dean Grey, Basildon, UK
 """
 
+import sys
+import os
+
+# Add the current directory to Python path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from rd_theory_v3 import RDTheoryV3
 
 
