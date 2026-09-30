@@ -1,6 +1,7 @@
 """RD-Guard V9: an agent-loop stability governor prototype."""
 
 from dataclasses import dataclass
+from typing import Any, Literal, TypedDict
 
 from actions_v9 import floor_block, forgetting_signal, knowledge_reduction
 from risk_engine_v9 import (
@@ -11,9 +12,45 @@ from risk_engine_v9 import (
 )
 
 
+class AgentState(TypedDict, total=False):
+    """Dictionary fields consumed or updated by the V9 governor."""
+
+    action: Any
+    requested_action: Any
+    branch: str
+    ci_passed: Any
+    ci: Any
+    deleting_tests: bool
+    bypass_alignment: bool
+    alignment_prompt_bypassed: bool
+    context: Any
+    context_size: int
+    context_limit: int
+    tool_calls: Any
+    tool_call_limit: int
+    tool_call_history: Any
+    target: Any
+    path: Any
+    resource: Any
+    command: Any
+    original_goal: str
+    current_goal: str
+    goal_drift: float
+    drift_score: float
+    action_history: Any
+    actions: Any
+    stall_window: int
+    no_progress_steps: int
+    no_progress_limit: int
+    stalled: bool
+    checkpoint: dict
+
+
 @dataclass(frozen=True)
 class GuardAction:
-    decision: str
+    decision: Literal[
+        "ALLOW", "BLOCK", "FORGETTING_SIGNAL", "KNOWLEDGE_REDUCTION", "REPLAN"
+    ]
     action: object = None
     reason: str = ""
     risk: float = 0.0
@@ -29,9 +66,32 @@ class IASFloor:
 
     def check(self, agent_state):
         action = agent_state.get("action", agent_state.get("requested_action", ""))
+        action_fields = []
+        action_branch = ""
+        action_data = action if isinstance(action, dict) else None
         if isinstance(action, dict):
+            action_branch = action.get("branch", "")
+            action_fields.extend(
+                action.get(key, "")
+                for key in (
+                    "type",
+                    "name",
+                    "target",
+                    "path",
+                    "resource",
+                    "command",
+                    "branch",
+                )
+            )
             action = action.get("type", action.get("name", ""))
-        action_text = str(action).lower().replace("-", "_").replace(" ", "_")
+        action_fields.extend(
+            agent_state.get(key, "")
+            for key in ("target", "path", "resource", "command")
+        )
+        action_text = " ".join(
+            str(value).lower().replace("-", "_").replace(" ", "_")
+            for value in (action, *action_fields)
+        )
 
         if (
             agent_state.get("deleting_tests")
@@ -45,12 +105,17 @@ class IASFloor:
         ):
             return "Deleting tests is prohibited by the IAS floor"
 
-        branch = str(agent_state.get("branch", "")).lower().rstrip("/").rsplit("/", 1)[-1]
-        pushes_main = (
-            "push" in action_text
-            and ("main" in action_text or branch == "main")
+        branch = str(agent_state.get("branch", action_branch)).lower()
+        branch = branch.rstrip("/").rsplit("/", 1)[-1]
+        pushes_main = "push" in action_text and (
+            "main" in action_text or branch == "main"
         )
         ci = agent_state.get("ci_passed", agent_state.get("ci", False))
+        if action_data is not None:
+            ci = agent_state.get(
+                "ci_passed",
+                agent_state.get("ci", action_data.get("ci_passed", False)),
+            )
         if isinstance(ci, dict):
             ci = ci.get("passed", False)
         ci_passed = ci is True or (
@@ -59,9 +124,17 @@ class IASFloor:
         if pushes_main and not ci_passed:
             return "Pushing to main requires passing CI"
 
-        if agent_state.get("bypass_alignment") or any(
-            phrase in action_text
-            for phrase in ("bypass_alignment", "skip_alignment", "ignore_alignment")
+        if (
+            agent_state.get("bypass_alignment")
+            or agent_state.get("alignment_prompt_bypassed")
+            or any(
+                phrase in action_text
+                for phrase in (
+                    "bypass_alignment",
+                    "skip_alignment",
+                    "ignore_alignment",
+                )
+            )
         ):
             return "Bypassing alignment prompts is prohibited by the IAS floor"
         return None
@@ -84,7 +157,7 @@ class RDGuard:
         self.drift_threshold = drift_threshold
         self.stall_threshold = stall_threshold
 
-    def observe(self, agent_state):
+    def observe(self, agent_state: AgentState) -> GuardAction:
         """Return a BLOCK, stabilization recommendation, or ALLOW result."""
         if not isinstance(agent_state, dict):
             raise TypeError("agent_state must be a dictionary")

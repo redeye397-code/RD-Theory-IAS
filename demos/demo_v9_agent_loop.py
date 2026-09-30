@@ -21,6 +21,7 @@ def run_demo():
         "action_history": [],
         "action": "work",
     }
+    outcomes = []
 
     for step in range(1, 21):
         if step <= 5:
@@ -39,6 +40,7 @@ def run_demo():
 
         result = guard.observe(state)
         executed = not result.blocked
+        outcomes.append((result, executed))
         print(
             "step={:02d} decision={} bloat={:.2f} drift={:.2f} stall={:.2f} "
             "executed={} reason={}".format(
@@ -58,6 +60,8 @@ def run_demo():
             state["action"] = "work"
         elif result.blocked:
             state["action"] = "work"
+
+    return outcomes
 
 
 if __name__ == "__main__":
