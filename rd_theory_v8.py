@@ -3,10 +3,30 @@ def canonical(o):
  return json.dumps(o,sort_keys=True)
 
 class HSM_TPM_SecureEnclave_Production:
- def __init__(self,a="audit.log"):
+ def __init__(self,a="audit.log",audit_file=None):
   self.hw_id="hw"
   self.compromised=False
-  self._a=a
+  self._a=audit_file if audit_file is not None else a
+  self._verify_existing_log()
+ def _verify_existing_log(self):
+  if not os.path.exists(self._a):
+   return
+  try:
+   with open(self._a,"r") as f:
+    lines=f.readlines()
+  except OSError:
+   return
+  for line in lines:
+   line=line.strip()
+   if not line:
+    continue
+   try:
+    entry=json.loads(line)
+   except ValueError:
+    self.compromised=True
+    continue
+   if not self.verify_attestation(entry):
+    self.compromised=True
  def seal(self,d):
   import hashlib,json,time
   h=hashlib.sha256(canonical(d).encode()).hexdigest()
@@ -25,7 +45,7 @@ class QuorumRate:
   self._c=False
  def request(self):
   if self._c:
-   raise RuntimeError("RATE_LIMIT_EXCEEDED")
+   raise RuntimeError("RATE_LIMIT_60S")
   self._c=True
 
 class FaultDomain:
@@ -33,22 +53,25 @@ class FaultDomain:
   self.parent=p
  def check_hw_spoof(self,f):
   self.parent.tpm.compromised=True
-  raise RuntimeError("POISON_PILL_WIPE_TRIGGERED")
+  raise RuntimeError("POISON_PILL_TRIGGERED_WIPE")
 
 class GhostVaultV8_Production:
  def __init__(self,a="audit.log"):
   self.tpm=HSM_TPM_SecureEnclave_Production(a)
   self.quorum=QuorumRate()
   self.fault=FaultDomain(self)
-  self._ht=[]
+  self._heartbeat_times=[]
   self._run=False
- def start_heartbeat(self,i=0.05):
+ @property
+ def compromised(self):
+  return self.tpm.compromised
+ def start_heartbeat(self,interval=0.05):
   self._run=True
-  self._ht=[]
+  self._heartbeat_times=[]
   def L():
    while self._run:
-    self._ht.append(time.time())
-    time.sleep(i)
+    self._heartbeat_times.append(time.time())
+    time.sleep(interval)
   import threading
   threading.Thread(target=L,daemon=True).start()
  def stop_heartbeat(self):
