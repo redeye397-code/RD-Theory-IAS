@@ -28,3 +28,19 @@ def test_v8_reference_import_warns_and_works():
 
     assert rd_theory_v8.GhostVaultV8_Production
     assert any(issubclass(item.category, DeprecationWarning) for item in caught)
+
+
+def test_v9_helper_imports_warn_and_work():
+    import actions_v9
+    import risk_engine_v9
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        importlib.reload(actions_v9)
+        importlib.reload(risk_engine_v9)
+
+    assert callable(actions_v9.floor_block)
+    assert callable(risk_engine_v9.combined_risk)
+    assert sum(
+        issubclass(item.category, DeprecationWarning) for item in caught
+    ) == 2

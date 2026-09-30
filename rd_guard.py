@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
 
-from actions_v9 import floor_block, forgetting_signal, knowledge_reduction
-from risk_engine_v9 import (
+from _rd_guard_actions import floor_block, forgetting_signal, knowledge_reduction
+from _rd_guard_risk_engine import (
     bloat_score,
     combined_risk,
     drift_score,
