@@ -9,7 +9,7 @@ import hashlib, time, random, os
 from collections import deque
 
 warnings.warn(
-    "rd_theory_v7 is archived; use the supported V10 API from rd_guard.",
+    "rd_theory_v7 is archived; use the supported API from rd_guard.",
     DeprecationWarning,
     stacklevel=2,
 )

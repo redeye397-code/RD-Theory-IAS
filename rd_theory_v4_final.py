@@ -24,7 +24,7 @@ from __future__ import annotations
 import warnings
 
 warnings.warn(
-    "rd_theory_v4_final is archived; use the supported V10 API from rd_guard.",
+    "rd_theory_v4_final is archived; use the supported API from rd_guard.",
     DeprecationWarning,
     stacklevel=2,
 )

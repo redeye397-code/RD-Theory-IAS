@@ -1,6 +1,6 @@
-# RD Theory V10.0.0
+# RD Theory V11.2.0
 
-**Support policy:** V10.0.0 is the only supported version. V1–V9 are archived
+**Support policy:** V11.2.0 is the supported version. V1–V9 are archived
 and available for reference only; their legacy import paths remain available
 with `DeprecationWarning` notices.
 
@@ -81,8 +81,8 @@ write failure while recording a high-risk action also blocks execution.
 ## Prometheus metrics
 
 Prometheus instrumentation is optional. Install `prometheus-client` to collect
-metrics; without it, the metrics hooks are no-ops and the V10 APIs continue to
-work normally. Start the HTTP exporter explicitly:
+metrics; without it, the metrics hooks are no-ops and the RD Guard APIs continue
+to work normally. Start the HTTP exporter explicitly:
 
 ```python
 from _rd_metrics_server import start_metrics_server
@@ -187,8 +187,8 @@ cost before making performance changes.
 
 ## V11 roadmap
 
-V10.0.0 remains the supported release. The next planned milestone is **V11.2:
-onboarding and product clarity**, followed by safety and performance checks:
+V11.2.0 is the supported release, delivering **V11.2: onboarding and product
+clarity** along with safety and performance checks:
 
 - [x] Explain RD Guard's validated, fail-closed action enforcement up front.
 - [x] Provide a local-install command and a runnable allow/block example.

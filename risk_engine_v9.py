@@ -3,7 +3,7 @@
 import warnings
 
 warnings.warn(
-    "risk_engine_v9 is archived; use the supported V10 API from rd_guard.",
+    "risk_engine_v9 is archived; use the supported API from rd_guard.",
     DeprecationWarning,
     stacklevel=2,
 )
