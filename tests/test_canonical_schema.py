@@ -20,6 +20,13 @@ def test_from_state_accepts_structured_action_dict():
     assert action.ci_passed is True
 
 
+def test_ci_passed_is_coerced_to_a_canonical_bool():
+    assert CanonicalAction(type="push", ci_passed="success").ci_passed is True
+    assert CanonicalAction(type="push", ci_passed="not run").ci_passed is False
+    assert CanonicalAction(type="push", ci_passed={"passed": True}).ci_passed is True
+    assert CanonicalAction(type="push", ci_passed=None).ci_passed is False
+
+
 def test_from_state_accepts_requested_action_field():
     action = CanonicalAction.from_state({"requested_action": "replan"})
     assert action.type == "replan"

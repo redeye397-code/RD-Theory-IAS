@@ -116,3 +116,14 @@ def test_high_risk_action_cannot_bypass_executor_via_risk_level():
     ))
     assert result.decision == "ALLOW"
     assert executed
+
+
+def test_default_audit_sinks_are_not_shared_between_executor_instances():
+    first = GuardedExecutor()
+    second = GuardedExecutor()
+
+    first.execute({"action": "delete_tests"})
+
+    assert len(first.audit_log) == 2
+    assert len(second.audit_log) == 0
+

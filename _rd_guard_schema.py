@@ -17,6 +17,26 @@ class SchemaError(ValueError):
 
 VALID_RISK_LEVELS = ("low", "medium", "high")
 
+_CI_PASSED_TRUE_STRINGS = {"passed", "success", "green"}
+
+
+def _coerce_ci_passed(value):
+    """Coerce the many V9-era CI-status shapes into a canonical bool.
+
+    Mirrors ``IASFloor.check``'s own tolerant handling of ``ci_passed``/``ci``
+    (``True``, or a string like ``"passed"``/``"success"``/``"green"``, or a
+    ``{"passed": ...}`` dict) so the canonical schema stays consistent with
+    the existing enforcement logic instead of silently accepting arbitrary
+    values.
+    """
+    if isinstance(value, dict):
+        value = value.get("passed", False)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in _CI_PASSED_TRUE_STRINGS
+    return bool(value)
+
 
 @dataclass(frozen=True)
 class CanonicalAction:
@@ -28,7 +48,7 @@ class CanonicalAction:
     resource: str = ""
     command: str = ""
     branch: str = ""
-    ci_passed: object = False
+    ci_passed: bool = False
     risk_level: str = "low"
 
     def __post_init__(self):
@@ -39,6 +59,8 @@ class CanonicalAction:
                 f"action.risk_level must be one of {VALID_RISK_LEVELS}, "
                 f"got {self.risk_level!r}"
             )
+        if not isinstance(self.ci_passed, bool):
+            object.__setattr__(self, "ci_passed", _coerce_ci_passed(self.ci_passed))
 
     @classmethod
     def from_state(cls, agent_state):

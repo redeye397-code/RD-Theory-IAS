@@ -20,15 +20,18 @@ class AuditWriteError(RuntimeError):
 class AuditSink:
     """Thin wrapper around a list-like audit backend with a failure mode.
 
-    Defaults to appending to the process-local ``AUDIT_LOG`` (the same
-    in-memory limitation acknowledged elsewhere in the project), but exposes
+    Defaults to a fresh, private list per instance (matching ``RDGuard``'s
+    own per-instance default audit log) so unrelated ``AuditSink``/
+    ``GuardedExecutor`` instances never silently share and mutate state.
+    Pass ``backend=AUDIT_LOG`` explicitly to opt into the shared,
+    process-local log used elsewhere in the project. Exposes
     ``mark_unavailable``/``ensure_available`` so tests and callers can
     simulate and detect audit unavailability (e.g. disk full) without
     silently losing high-risk actions.
     """
 
     def __init__(self, backend=None):
-        self._backend = AUDIT_LOG if backend is None else backend
+        self._backend = [] if backend is None else backend
         self._unavailable = False
 
     def mark_unavailable(self, unavailable=True):
