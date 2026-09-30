@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased — V11.2 onboarding and safety checks
+
+- Positioned RD Guard in the README and added local installation and an
+  allow/block quick start using the stable V10 API.
+- Added setup and architecture documentation, including the limits of the
+  enforcement boundary and Prometheus p95 latency guidance.
+- Added an optional standard-library webhook notifier with a per-instance
+  cooldown; malformed inputs, missing configuration, and failed requests do
+  not raise or bypass action enforcement.
+- Added malformed canonical-action cases and a 10,000-evaluation schema
+  performance regression check with a conservative 10-second CI ceiling.
+
 ## 10.0.0
 
 - Set the canonical project version to 10.0.0; V10 is the only supported
