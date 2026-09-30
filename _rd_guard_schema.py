@@ -112,7 +112,7 @@ class CanonicalAction:
         )
 
     def as_text(self):
-        """A lowercase, normalized token stream used for keyword matching."""
+        """A lowercase, normalized, ``_``-delimited token stream for keyword matching."""
         parts = (
             self.type,
             self.target,
@@ -121,6 +121,6 @@ class CanonicalAction:
             self.command,
             self.branch,
         )
-        return " ".join(
+        return "_".join(
             str(part).lower().replace("-", "_").replace(" ", "_") for part in parts
         )

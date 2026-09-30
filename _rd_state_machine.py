@@ -116,6 +116,16 @@ TRANSITION_TABLE = {
         "repeated_attempt_behavior": "N/A -- entry transition, not a recovery attempt.",
         "corrupt_checkpoint_behavior": "N/A -- no recovery checkpoint is involved.",
     },
+    (FAULT, "FAULT"): {
+        "trigger_actor": "System (automatic) -- an additional fault trigger while already in FAULT",
+        "reversible": False,
+        "evidence_required": "a new FAULT audit record with the additional triggering reason",
+        "operator_approval_required": True,
+        "restart_behavior": "Persisted; a restarted process resumes in FAULT.",
+        "repeated_attempt_behavior": "Self-transition: every repeated fault trigger is still "
+        "recorded rather than silently dropped, so operators see the full fault history.",
+        "corrupt_checkpoint_behavior": "N/A -- no recovery checkpoint is involved.",
+    },
     (FAULT, "RECOVERY_REQUESTED"): {
         "trigger_actor": "Operator supplies a checkpoint and a single-use approval token",
         "reversible": True,
@@ -241,9 +251,14 @@ class SafetyStateMachine:
         return self._transition("RETRY_ALLOWED")
 
     def enter_fault(self, reason=""):
-        if self.state == FAULT:
-            return self.state
+        """Transition to FAULT, recording every trigger even if already there.
+
+        Repeated faults while already in FAULT are not silently dropped:
+        each call still records an audit entry via the ``(FAULT, "FAULT")``
+        self-transition, so operators can see every fault trigger.
+        """
         return self._transition("FAULT", reason=reason)
+
 
     def _check_clock(self, now):
         """Reject any event timestamped earlier than the last observed one.

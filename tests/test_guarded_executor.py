@@ -17,6 +17,17 @@ def test_low_risk_allowed_action_runs_and_reaches_run_callback():
     assert executor.state_machine.state == "NORMAL"
 
 
+def test_high_risk_keyword_matching_avoids_substring_false_positives():
+    executor = GuardedExecutor()
+
+    # "confirm_receipt" contains "rm" and "dropdown_menu" contains "drop" as
+    # plain substrings, but neither is the high-risk word itself.
+    assert executor._is_high_risk(CanonicalAction.from_state({"action": "confirm_receipt"})) is False
+    assert executor._is_high_risk(CanonicalAction.from_state({"action": "render_dropdown_menu"})) is False
+    assert executor._is_high_risk(CanonicalAction.from_state({"action": "rm_tests_file"})) is True
+    assert executor._is_high_risk(CanonicalAction.from_state({"action": "drop", "path": "table"})) is True
+
+
 def test_high_risk_floor_blocked_action_never_reaches_run_callback():
     executor = GuardedExecutor()
     executed = []

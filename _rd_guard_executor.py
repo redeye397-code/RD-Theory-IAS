@@ -8,6 +8,8 @@ closed and blocks the action instead of executing it, and the safety state
 machine transitions to ``FAULT``.
 """
 
+import re
+
 from _rd_guard_actions import AuditSink, AuditWriteError
 from _rd_guard_schema import CanonicalAction, SchemaError
 from _rd_state_machine import SafetyStateMachine
@@ -16,10 +18,13 @@ from rd_guard import GuardAction, RDGuard
 
 #: Keyword fragments that mark an action as high-risk regardless of the
 #: guard's own risk scoring. Mirrors the hard constraints in ``IASFloor``.
+#: Matched on ``_``-delimited token boundaries (see ``_is_high_risk``) so
+#: e.g. ``"rm"`` does not also match ``"confirm_receipt"`` and ``"drop"``
+#: does not also match ``"dropdown"``.
 HIGH_RISK_KEYWORDS = (
     "delete",
     "remove",
-    "rm_",
+    "rm",
     "unlink",
     "erase",
     "drop",
@@ -27,6 +32,10 @@ HIGH_RISK_KEYWORDS = (
     "bypass_alignment",
     "skip_alignment",
     "ignore_alignment",
+)
+
+_HIGH_RISK_PATTERNS = tuple(
+    re.compile(rf"(?:^|_){re.escape(keyword)}(?:_|$)") for keyword in HIGH_RISK_KEYWORDS
 )
 
 
@@ -51,7 +60,7 @@ class GuardedExecutor:
         if action.risk_level == "high":
             return True
         text = action.as_text()
-        return any(keyword in text for keyword in HIGH_RISK_KEYWORDS)
+        return any(pattern.search(text) for pattern in _HIGH_RISK_PATTERNS)
 
     def _ensure_audit_available(self):
         ensure_available = getattr(self.audit_log, "ensure_available", None)

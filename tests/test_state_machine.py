@@ -80,6 +80,19 @@ def test_enter_fault_is_idempotent():
     assert sm.state == FAULT
 
 
+def test_enter_fault_records_repeated_triggers_instead_of_dropping_them():
+    audit_log = []
+    sm = SafetyStateMachine(audit_log=audit_log)
+    sm.enter_fault("first")
+    sm.enter_fault("second")
+
+    fault_records = [record for record in audit_log if record["event"] == "FAULT"]
+    assert len(fault_records) == 2
+    assert fault_records[0]["reason"] == "first"
+    assert fault_records[1]["reason"] == "second"
+
+
+
 def test_invalid_transition_raises():
     sm = SafetyStateMachine(audit_log=[])
     with pytest.raises(InvalidTransitionError):
