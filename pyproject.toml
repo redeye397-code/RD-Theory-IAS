@@ -39,3 +39,8 @@ py-modules = [
     "demo_v3_sequence",
     "demo_v4_quad_locked",
 ]
+packages = [
+    "v11",
+    "v11.integrations",
+    "v11.telemetry",
+]

@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Added a V11 starter package (`v11/`), additive on top of the V10.0 core
+  safety contract:
+  - `v11/config.py` -- environment-driven configuration
+    (`RD_GUARD_ENV`, `METRICS_PORT`, `RD_GUARD_WEBHOOK_URL`,
+    `RD_GUARD_LOG_LEVEL`).
+  - `v11/schemas.py` -- `Checkpoint`/`AgentState` models that default and
+    validate missing or partial data instead of raising.
+  - `v11/integrations/webhook.py` -- fail-safe webhook alerting.
+  - `v11/telemetry/logging.py` -- structured JSON logging.
+- Added `docs/setup.md` and `docs/architecture.md` for V11.
+- Added `.github/ISSUE_TEMPLATE/bug_report.md`.
+- Added a V11 starter-model section to `README.md`.
+
 ## 10.0.0
 
 - Set the canonical project version to 10.0.0; V10 is the only supported

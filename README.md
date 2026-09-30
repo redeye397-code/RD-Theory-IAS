@@ -356,6 +356,74 @@ This framework is published for:
 
 ---
 
+## RD Guard V11 (starter package)
+
+**One-line pitch:** RD Guard is a fail-closed Python guard that prevents
+unsafe states/actions, used when reliability matters.
+
+V11 is additive on top of the V10.0 core safety contract: it adds the
+production-shaped layer a real deployment needs -- environment
+configuration, defensive schema validation, one real external integration,
+and structured logs -- without changing any V10 public API.
+
+### Quick start
+
+```bash
+pip install -r requirements.txt
+
+export RD_GUARD_ENV=prod
+export METRICS_PORT=9090
+export RD_GUARD_WEBHOOK_URL=https://hooks.example.com/alert
+export RD_GUARD_LOG_LEVEL=INFO
+```
+
+```python
+from v11 import load_config, AgentState
+from v11.integrations.webhook import send_webhook_alert
+from v11.telemetry.logging import get_logger
+
+config = load_config()
+logger = get_logger("rd_guard", level=config.log_level)
+
+state = AgentState.from_dict(raw_agent_state)  # handles missing/partial data safely
+logger.info("agent state observed")
+
+if state.is_over_context_limit:
+    send_webhook_alert(config.webhook_url, {"message": "context limit exceeded"})
+```
+
+### Project structure
+
+- `v11/config.py` — environment-driven configuration (`RD_GUARD_ENV`,
+  `METRICS_PORT`, `RD_GUARD_WEBHOOK_URL`, `RD_GUARD_LOG_LEVEL`)
+- `v11/schemas.py` — `Checkpoint`/`AgentState` models that default and
+  validate missing or partial data instead of crashing
+- `v11/integrations/webhook.py` — fail-safe webhook alerting (Slack/Discord
+  compatible incoming webhooks)
+- `v11/telemetry/logging.py` — structured JSON logging (timestamp, level,
+  logger name, message, optional exception)
+- `docs/setup.md` — install and environment-variable setup guide
+- `docs/architecture.md` — V11 design goals and module responsibilities
+- `.github/ISSUE_TEMPLATE/bug_report.md` — bug report template
+
+### Roadmap
+
+- **V11.1 — Foundations:** reliable data model (`schemas.py`), deployment
+  and environment config (`config.py`).
+- **V11.2 — Productization:** clear core use case (this pitch), one real
+  integration (`integrations/webhook.py`).
+- **V11.3 — Real-world readiness:** structured JSON logs
+  (`telemetry/logging.py`), setup/architecture docs, issue template.
+
+### Why it exists
+
+Most safety theory doesn't survive real usage. V11 is the version that
+makes RD Guard practical: it fails safely on bad input, can be deployed
+across dev/staging/prod, and tells an operator (via logs and webhook
+alerts) when something goes wrong, instead of silently misbehaving.
+
+---
+
 ## Next Steps
 
 For production hardening:
