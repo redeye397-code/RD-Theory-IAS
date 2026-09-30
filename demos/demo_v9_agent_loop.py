@@ -17,7 +17,7 @@ def run_demo():
         },
         "context": [],
         "context_size": 0,
-        "context_limit": 8,
+        "context_limit": 4,
         "action_history": [],
         "action": "work",
     }
