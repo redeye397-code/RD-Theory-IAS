@@ -35,13 +35,24 @@ class AuditSink:
         self._unavailable = unavailable
 
     def ensure_available(self):
-        """Raise ``AuditWriteError`` if the sink cannot currently accept writes."""
+        """Probe the backend with a real write before authorizing risky work."""
         if self._unavailable:
             raise AuditWriteError("audit log unavailable (e.g. disk full)")
+        try:
+            ensure_backend_available = getattr(self._backend, "ensure_available", None)
+            if callable(ensure_backend_available):
+                ensure_backend_available()
+            self._backend.append({"event": "AUDIT_HEALTH_CHECK"})
+        except Exception as exc:
+            raise AuditWriteError(f"audit log unavailable: {exc}") from exc
 
     def append(self, record):
-        self.ensure_available()
-        self._backend.append(record)
+        if self._unavailable:
+            raise AuditWriteError("audit log unavailable (e.g. disk full)")
+        try:
+            self._backend.append(record)
+        except Exception as exc:
+            raise AuditWriteError(f"audit log unavailable: {exc}") from exc
 
     def __len__(self):
         return len(self._backend)

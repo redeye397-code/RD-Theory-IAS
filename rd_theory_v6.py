@@ -4,8 +4,15 @@ Answers ALL Copilot V5 questions
 OPEN SOURCE - FREE
 """
 
+import warnings
 import hashlib, time
 from collections import deque
+
+warnings.warn(
+    "rd_theory_v6 is archived; use the supported V10 API from rd_guard.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 # ============ V5 ISSUE 1: GHOST NOT TRULY HIDDEN ============
 # FIX: Separate protected memory - AI cannot access self.vault

@@ -79,6 +79,15 @@ TRANSITION_TABLE = {
         "repeated_attempt_behavior": "Unbounded; each pass is self-correcting and audited.",
         "corrupt_checkpoint_behavior": "N/A -- no recovery checkpoint is involved.",
     },
+    (STABILIZING, "STABILIZE"): {
+        "trigger_actor": "RDGuard (automatic) when risk remains above a stabilization threshold",
+        "reversible": True,
+        "evidence_required": "updated bloat/drift/stall risk scores recorded on the GuardAction",
+        "operator_approval_required": False,
+        "restart_behavior": "Resumes in STABILIZING; the next observation re-scores risk.",
+        "repeated_attempt_behavior": "Unbounded; each pass is self-correcting and audited.",
+        "corrupt_checkpoint_behavior": "N/A -- no recovery checkpoint is involved.",
+    },
     (STABILIZING, "STABILIZED"): {
         "trigger_actor": "RDGuard (automatic) once risk falls back within thresholds",
         "reversible": True,
@@ -97,6 +106,24 @@ TRANSITION_TABLE = {
         "repeated_attempt_behavior": "Each violation re-enters BLOCKED and is independently audited.",
         "corrupt_checkpoint_behavior": "N/A -- no recovery checkpoint is involved.",
     },
+    (STABILIZING, "FLOOR_BLOCK"): {
+        "trigger_actor": "IASFloor (automatic hard constraint) on a disallowed action",
+        "reversible": True,
+        "evidence_required": "FLOOR_BLOCK audit record with the violated rule's reason",
+        "operator_approval_required": False,
+        "restart_behavior": "Resumes in BLOCKED; the blocked action is never retried automatically.",
+        "repeated_attempt_behavior": "Each violation re-enters BLOCKED and is independently audited.",
+        "corrupt_checkpoint_behavior": "N/A -- no recovery checkpoint is involved.",
+    },
+    (BLOCKED, "FLOOR_BLOCK"): {
+        "trigger_actor": "IASFloor (automatic hard constraint) on another disallowed action",
+        "reversible": True,
+        "evidence_required": "FLOOR_BLOCK audit record with the violated rule's reason",
+        "operator_approval_required": False,
+        "restart_behavior": "Resumes in BLOCKED; the blocked action is never retried automatically.",
+        "repeated_attempt_behavior": "Each violation remains BLOCKED and is independently audited.",
+        "corrupt_checkpoint_behavior": "N/A -- no recovery checkpoint is involved.",
+    },
     (BLOCKED, "RETRY_ALLOWED"): {
         "trigger_actor": "Caller submits a new, compliant action (automatic)",
         "reversible": True,
@@ -109,6 +136,24 @@ TRANSITION_TABLE = {
     (NORMAL, "FAULT"): {
         "trigger_actor": "System (automatic) on a safety-critical failure, e.g. audit "
         "unavailable for a high-risk action, or a hardware/tamper fault",
+        "reversible": False,
+        "evidence_required": "FAULT audit record with the triggering reason, if audit is available",
+        "operator_approval_required": True,
+        "restart_behavior": "Persisted; a restarted process resumes in FAULT, not NORMAL.",
+        "repeated_attempt_behavior": "N/A -- entry transition, not a recovery attempt.",
+        "corrupt_checkpoint_behavior": "N/A -- no recovery checkpoint is involved.",
+    },
+    (STABILIZING, "FAULT"): {
+        "trigger_actor": "System (automatic) on a safety-critical failure during stabilization",
+        "reversible": False,
+        "evidence_required": "FAULT audit record with the triggering reason, if audit is available",
+        "operator_approval_required": True,
+        "restart_behavior": "Persisted; a restarted process resumes in FAULT, not NORMAL.",
+        "repeated_attempt_behavior": "N/A -- entry transition, not a recovery attempt.",
+        "corrupt_checkpoint_behavior": "N/A -- no recovery checkpoint is involved.",
+    },
+    (BLOCKED, "FAULT"): {
+        "trigger_actor": "System (automatic) on a safety-critical failure while BLOCKED",
         "reversible": False,
         "evidence_required": "FAULT audit record with the triggering reason, if audit is available",
         "operator_approval_required": True,
@@ -158,6 +203,17 @@ TRANSITION_TABLE = {
         "corrupt_checkpoint_behavior": "Directly caused by a missing/deleted/corrupt checkpoint.",
     },
     (FAULT, "TAMPER_CONFIRMED"): {
+        "trigger_actor": "System (automatic) after max_recovery_attempts is exceeded, or an "
+        "explicit hardware/tamper confirmation (e.g. GhostVault poison pill)",
+        "reversible": False,
+        "evidence_required": "recovery-attempt count exceeding the bound, or a tamper attestation",
+        "operator_approval_required": True,
+        "restart_behavior": "Persisted; a restarted process resumes in COMPROMISED and cannot "
+        "self-recover.",
+        "repeated_attempt_behavior": "No further automated recovery attempts are accepted.",
+        "corrupt_checkpoint_behavior": "N/A -- terminal state; requires manual, out-of-band reset.",
+    },
+    (RECOVERING, "TAMPER_CONFIRMED"): {
         "trigger_actor": "System (automatic) after max_recovery_attempts is exceeded, or an "
         "explicit hardware/tamper confirmation (e.g. GhostVault poison pill)",
         "reversible": False,
@@ -309,7 +365,7 @@ class SafetyStateMachine:
             raise RecoveryError(f"CHECKPOINT_{status.upper()}")
 
         self.consumed_approvals.add(approval_token)
-        self._transition("RECOVERY_REQUESTED", token=approval_token)
+        self._transition("RECOVERY_REQUESTED")
         self._transition("RECOVERY_SUCCEEDED")
         self.recovery_attempts = 0
         return checkpoint["data"]

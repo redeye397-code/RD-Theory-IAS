@@ -64,6 +64,43 @@ def test_audit_unavailable_fails_closed_for_high_risk_action():
     assert executor.state_machine.state == "FAULT"
 
 
+def test_audit_backend_write_failure_fails_closed_for_high_risk_action():
+    class DiskFullAudit(list):
+        def append(self, record):
+            raise OSError("disk full")
+
+    executor = GuardedExecutor(audit_log=DiskFullAudit())
+    executed = []
+
+    result = executor.execute(
+        {"action": {"type": "publish", "risk_level": "high"}},
+        run=executed.append,
+    )
+
+    assert result.decision == "BLOCK"
+    assert result.blocked is True
+    assert executed == []
+    assert executor.state_machine.state == "FAULT"
+
+
+def test_audit_failure_while_recording_floor_block_fails_closed():
+    class AuditFailsOnBlock(list):
+        def append(self, record):
+            if record.get("event") == "FLOOR_BLOCK":
+                raise OSError("disk full")
+            super().append(record)
+
+    executor = GuardedExecutor(audit_log=AuditFailsOnBlock())
+    executed = []
+
+    result = executor.execute({"action": "delete_tests"}, run=executed.append)
+
+    assert result.decision == "BLOCK"
+    assert result.blocked is True
+    assert executed == []
+    assert executor.state_machine.state == "FAULT"
+
+
 def test_audit_unavailable_does_not_block_low_risk_actions():
     audit = AuditSink(backend=[])
     executor = GuardedExecutor(audit_log=audit)

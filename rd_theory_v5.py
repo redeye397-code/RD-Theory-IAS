@@ -20,6 +20,14 @@ Quote: "Normal AI safety just stops it. This lets it FAIL SAFELY then KEEP OPERA
 
 from __future__ import annotations
 
+import warnings
+
+warnings.warn(
+    "rd_theory_v5 is archived; use the supported V10 API from rd_guard.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 
 class GhostCacheVault:
     """Hidden write-only backup vault.

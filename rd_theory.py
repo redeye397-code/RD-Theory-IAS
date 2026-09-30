@@ -8,7 +8,6 @@ and other tooling can import directly as ``from rd_theory import RDTheory``.
 
 from __future__ import annotations
 
-
 class RDTheory:
     """Minimal RD Theory model tracking alphabet reserve and knowledge.
 

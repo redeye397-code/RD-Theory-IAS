@@ -12,6 +12,7 @@ from rd_executor import (
     InvalidTransitionError,
     RecoveryError,
     SafetyStateMachine,
+    TRANSITIONS,
     TRANSITION_TABLE,
     seal_checkpoint,
     verify_checkpoint,
@@ -30,6 +31,7 @@ REQUIRED_TRANSITION_FIELDS = (
 
 
 def test_every_transition_is_fully_documented():
+    assert set(TRANSITIONS) == set(TRANSITION_TABLE)
     for key, contract in TRANSITION_TABLE.items():
         for field_name in REQUIRED_TRANSITION_FIELDS:
             assert field_name in contract, f"{key} missing {field_name}"
