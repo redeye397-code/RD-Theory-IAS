@@ -29,6 +29,8 @@ py-modules = [
     "_rd_guard_schema",
     "_rd_guard_executor",
     "_rd_state_machine",
+    "_rd_metrics",
+    "_rd_metrics_server",
     "rd_vault",
     "_rd_vault_core",
     "risk_engine_v9",

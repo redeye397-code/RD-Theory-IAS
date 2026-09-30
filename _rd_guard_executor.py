@@ -14,6 +14,7 @@ from _rd_guard_actions import AuditSink, AuditWriteError
 from _rd_guard_schema import CanonicalAction, SchemaError
 from _rd_state_machine import SafetyStateMachine
 from rd_guard import GuardAction, RDGuard
+from _rd_metrics import DEFAULT_METRICS
 
 
 #: Keyword fragments that mark an action as high-risk regardless of the
@@ -42,7 +43,15 @@ _HIGH_RISK_PATTERNS = tuple(
 class GuardedExecutor:
     """The single enforcement boundary through which actions must pass."""
 
-    def __init__(self, guard=None, audit_log=None, state_machine=None):
+    def __init__(self, guard=None, audit_log=None, state_machine=None, metrics=None):
+        self.metrics = metrics
+        if self.metrics is None and guard is not None:
+            self.metrics = getattr(guard, "metrics", None)
+        if self.metrics is None and state_machine is not None:
+            self.metrics = getattr(state_machine, "metrics", None)
+        if self.metrics is None:
+            self.metrics = DEFAULT_METRICS
+
         if guard is not None:
             self.guard = guard
         else:
@@ -51,16 +60,20 @@ class GuardedExecutor:
                     audit_log
                     if isinstance(audit_log, AuditSink)
                     else AuditSink(backend=audit_log)
-                )
+                ),
+                metrics=self.metrics,
             )
+        self.guard.metrics = self.metrics
         if not isinstance(self.guard.audit_log, AuditSink):
             self.guard.audit_log = AuditSink(backend=self.guard.audit_log)
         self.audit_log = self.guard.audit_log
         self.state_machine = (
             state_machine
             if state_machine is not None
-            else SafetyStateMachine(audit_log=self.audit_log)
+            else SafetyStateMachine(audit_log=self.audit_log, metrics=self.metrics)
         )
+        self.state_machine.metrics = self.metrics
+        self.state_machine.metrics.set_state(self.state_machine.state)
 
     def _is_high_risk(self, action: CanonicalAction) -> bool:
         if action.risk_level == "high":
@@ -75,6 +88,7 @@ class GuardedExecutor:
 
     def _audit_failure(self, action, error):
         self.state_machine.enter_fault(f"AUDIT_UNAVAILABLE: {error}")
+        self.metrics.record_decision("BLOCK")
         return GuardAction(
             decision="BLOCK",
             action=action.type,
@@ -84,6 +98,10 @@ class GuardedExecutor:
         )
 
     def execute(self, agent_state, run=None):
+        with self.metrics.time("executor_execute_seconds"):
+            return self._execute(agent_state, run)
+
+    def _execute(self, agent_state, run=None):
         """Validate, observe, and (if allowed) execute ``agent_state``'s action.
 
         Returns the ``GuardAction`` produced by the guard (or an equivalent
@@ -91,14 +109,14 @@ class GuardedExecutor:
         the action is allowed to proceed -- high-risk actions can never reach
         ``run`` while bypassing this boundary.
         """
-        action = CanonicalAction.from_state(agent_state)
-        high_risk = self._is_high_risk(action)
-
-        if high_risk:
-            try:
-                self._ensure_audit_available()
-            except AuditWriteError as exc:
-                return self._audit_failure(action, exc)
+        with self.metrics.time("executor_validation_seconds"):
+            action = CanonicalAction.from_state(agent_state)
+            high_risk = self._is_high_risk(action)
+            if high_risk:
+                try:
+                    self._ensure_audit_available()
+                except AuditWriteError as exc:
+                    return self._audit_failure(action, exc)
 
         try:
             result = self.guard.observe(agent_state)
@@ -124,7 +142,8 @@ class GuardedExecutor:
             self.state_machine.retry_allowed()
 
         if run is not None:
-            run(action)
+            with self.metrics.time("executor_execution_seconds"):
+                run(action)
 
         return result
 

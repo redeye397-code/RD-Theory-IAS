@@ -10,6 +10,7 @@ from _rd_guard_risk_engine import (
     drift_score,
     stall_score,
 )
+from _rd_metrics import DEFAULT_METRICS
 
 
 class AgentState(TypedDict, total=False):
@@ -150,15 +151,23 @@ class RDGuard:
         bloat_threshold=0.7,
         drift_threshold=0.6,
         stall_threshold=0.6,
+        metrics=None,
     ):
         self.floor = floor or IASFloor()
         self.audit_log = audit_log if audit_log is not None else []
         self.bloat_threshold = bloat_threshold
         self.drift_threshold = drift_threshold
         self.stall_threshold = stall_threshold
+        self.metrics = metrics if metrics is not None else DEFAULT_METRICS
 
     def observe(self, agent_state: AgentState) -> GuardAction:
         """Return a BLOCK, stabilization recommendation, or ALLOW result."""
+        with self.metrics.time("guard_observe_seconds"):
+            result = self._observe(agent_state)
+        self.metrics.record_decision(result.decision)
+        return result
+
+    def _observe(self, agent_state: AgentState) -> GuardAction:
         if not isinstance(agent_state, dict):
             raise TypeError("agent_state must be a dictionary")
 
@@ -173,10 +182,14 @@ class RDGuard:
                 audit_record=result["audit_record"],
             )
 
-        bloat = bloat_score(agent_state)
-        drift = drift_score(agent_state)
-        stall = stall_score(agent_state)
-        risk = combined_risk(agent_state)
+        with self.metrics.time("risk_score_seconds", score="bloat"):
+            bloat = bloat_score(agent_state)
+        with self.metrics.time("risk_score_seconds", score="drift"):
+            drift = drift_score(agent_state)
+        with self.metrics.time("risk_score_seconds", score="stall"):
+            stall = stall_score(agent_state)
+        with self.metrics.time("risk_score_seconds", score="combined"):
+            risk = combined_risk(agent_state)
         action = agent_state.get("action", agent_state.get("requested_action"))
 
         if drift >= self.drift_threshold:
