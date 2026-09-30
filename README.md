@@ -49,6 +49,23 @@ otherwise recommend.
 The audit sink is probed with a health-check write before execution, and a
 write failure while recording a high-risk action also blocks execution.
 
+## Prometheus metrics
+
+Prometheus instrumentation is optional. Install `prometheus-client` to collect
+metrics; without it, the metrics hooks are no-ops and the V10 APIs continue to
+work normally. Start the HTTP exporter explicitly:
+
+```python
+from _rd_metrics_server import start_metrics_server
+
+metrics_server = start_metrics_server()  # default: :9090/metrics
+```
+
+Set `RD_GUARD_METRICS_HOST` and `RD_GUARD_METRICS_PORT` to configure the
+listener, or pass `host` and `port` to `start_metrics_server()`. Scrape
+`/metrics` with Prometheus. The example Grafana dashboard is
+`examples/grafana/rd_guard_dashboard.json`.
+
 ## State machine
 
 `GuardedExecutor` drives an explicit `SafetyStateMachine`

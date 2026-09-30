@@ -1,0 +1,204 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "pieType": "pie",
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rd_guard_safety_state == 1",
+          "legendFormat": "{{state}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Safety state",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 0
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "sum by (decision) (rate(rd_guard_action_decisions_total[5m]))",
+          "legendFormat": "{{decision}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Guard action decisions / second",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(rd_guard_observe_duration_seconds_bucket[5m])))",
+          "legendFormat": "observe p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(rd_guard_observe_duration_seconds_bucket[5m])))",
+          "legendFormat": "observe p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(rd_guard_observe_duration_seconds_bucket[5m])))",
+          "legendFormat": "observe p99",
+          "refId": "C"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, score) (rate(rd_guard_risk_score_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{score}} risk p50",
+          "refId": "D"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, score) (rate(rd_guard_risk_score_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{score}} risk p95",
+          "refId": "E"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, score) (rate(rd_guard_risk_score_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{score}} risk p99",
+          "refId": "F"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(rd_guard_executor_validation_duration_seconds_bucket[5m])))",
+          "legendFormat": "validation p50",
+          "refId": "G"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(rd_guard_executor_validation_duration_seconds_bucket[5m])))",
+          "legendFormat": "validation p95",
+          "refId": "H"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(rd_guard_executor_validation_duration_seconds_bucket[5m])))",
+          "legendFormat": "validation p99",
+          "refId": "I"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(rd_guard_executor_execution_duration_seconds_bucket[5m])))",
+          "legendFormat": "execute p50",
+          "refId": "J"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(rd_guard_executor_execution_duration_seconds_bucket[5m])))",
+          "legendFormat": "execute p95",
+          "refId": "K"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(rd_guard_executor_execution_duration_seconds_bucket[5m])))",
+          "legendFormat": "execute p99",
+          "refId": "L"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, operation) (rate(rd_guard_vault_operation_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{operation}} vault p50",
+          "refId": "M"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(rd_guard_vault_operation_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{operation}} vault p95",
+          "refId": "N"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, operation) (rate(rd_guard_vault_operation_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{operation}} vault p99",
+          "refId": "O"
+        }
+      ],
+      "title": "Observe and execute latency percentiles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "sum by (operation) (rate(rd_guard_vault_operations_total{outcome=\"success\"}[5m])) / (sum by (operation) (rate(rd_guard_vault_operations_total{outcome=\"success\"}[5m])) + sum by (operation) (rate(rd_guard_vault_operations_total{outcome=\"failure\"}[5m])))",
+          "legendFormat": "{{operation}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Vault operation success rate",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 39,
+  "title": "RD Guard",
+  "uid": "rd-guard",
+  "version": 1
+}

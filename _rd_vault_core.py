@@ -5,6 +5,7 @@ here directly; use `rd_vault` (or the archived, deprecated `rd_theory_v8`
 compatibility path) instead.
 """
 import json, time, hashlib, os, threading
+from _rd_metrics import DEFAULT_METRICS
 
 
 def canonical(o):
@@ -12,10 +13,11 @@ def canonical(o):
 
 
 class HSM_TPM_SecureEnclave_Production:
-    def __init__(self, a="audit.log", audit_file=None):
+    def __init__(self, a="audit.log", audit_file=None, metrics=None):
         self.hw_id = "hw"
         self.compromised = False
         self._a = audit_file if audit_file is not None else a
+        self.metrics = metrics if metrics is not None else DEFAULT_METRICS
         self._verify_existing_log()
 
     def _verify_existing_log(self):
@@ -39,17 +41,46 @@ class HSM_TPM_SecureEnclave_Production:
                 self.compromised = True
 
     def seal(self, d):
-        h = hashlib.sha256(canonical(d).encode()).hexdigest()
-        e = {"data": d, "data_hash": h, "hw_id": self.hw_id, "ts": time.time(), "sig": "x"}
+        self.metrics.record_vault_operation("checkpoint_seal", "attempt")
         try:
-            with open(self._a, "a") as f:
-                f.write(json.dumps(e) + "\n")
-        except OSError:
-            pass
+            with self.metrics.time(
+                "vault_operation_seconds", operation="checkpoint_seal"
+            ):
+                h = hashlib.sha256(canonical(d).encode()).hexdigest()
+                e = {"data": d, "data_hash": h, "hw_id": self.hw_id, "ts": time.time(), "sig": "x"}
+                persisted = True
+                try:
+                    with open(self._a, "a") as f:
+                        f.write(json.dumps(e) + "\n")
+                except OSError:
+                    persisted = False
+        except Exception:
+            self.metrics.record_vault_operation("checkpoint_seal", "failure")
+            raise
+        self.metrics.record_vault_operation(
+            "checkpoint_seal", "success" if persisted else "failure"
+        )
         return e
 
     def verify_attestation(self, e):
-        return hashlib.sha256(canonical(e["data"]).encode()).hexdigest() == e.get("data_hash")
+        self.metrics.record_vault_operation("attestation_verification", "attempt")
+        try:
+            with self.metrics.time(
+                "vault_operation_seconds", operation="attestation_verification"
+            ):
+                valid = (
+                    hashlib.sha256(canonical(e["data"]).encode()).hexdigest()
+                    == e.get("data_hash")
+                )
+        except Exception:
+            self.metrics.record_vault_operation(
+                "attestation_verification", "failure"
+            )
+            raise
+        self.metrics.record_vault_operation(
+            "attestation_verification", "success" if valid else "failure"
+        )
+        return valid
 
 
 class QuorumRate:
@@ -87,8 +118,9 @@ class FaultDomain:
 
 
 class GhostVaultProduction:
-    def __init__(self, a="audit.log"):
-        self.tpm = HSM_TPM_SecureEnclave_Production(a)
+    def __init__(self, a="audit.log", metrics=None):
+        self.metrics = metrics if metrics is not None else DEFAULT_METRICS
+        self.tpm = HSM_TPM_SecureEnclave_Production(a, metrics=self.metrics)
         self.quorum = QuorumRate()
         self.fault = FaultDomain(self)
         self._heartbeat_times = []

@@ -28,6 +28,7 @@ import time
 
 from _rd_vault_core import canonical
 import hashlib
+from _rd_metrics import DEFAULT_METRICS
 
 
 NORMAL = "NORMAL"
@@ -227,24 +228,43 @@ TRANSITION_TABLE = {
 }
 
 
-def verify_checkpoint(checkpoint):
+def verify_checkpoint(checkpoint, metrics=None):
     """Return ``"valid"``, ``"missing"``, or ``"corrupt"`` for ``checkpoint``.
 
     A checkpoint of ``None`` covers both the "missing" and "deleted" cases
     described in the issue (V10.0 does not persist checkpoints as separate
     files, so there is no distinct on-disk "deleted" state to detect).
     """
-    if checkpoint is None:
-        return "missing"
-    if not isinstance(checkpoint, dict) or "data" not in checkpoint:
-        return "corrupt"
+    metrics = metrics if metrics is not None else DEFAULT_METRICS
+    metrics.record_vault_operation("checkpoint_verification", "attempt")
     try:
-        expected_hash = hashlib.sha256(canonical(checkpoint["data"]).encode()).hexdigest()
-    except (TypeError, ValueError):
-        return "corrupt"
-    if expected_hash != checkpoint.get("data_hash"):
-        return "corrupt"
-    return "valid"
+        with metrics.time(
+            "vault_operation_seconds", operation="checkpoint_verification"
+        ):
+            if checkpoint is None:
+                status = "missing"
+            elif not isinstance(checkpoint, dict) or "data" not in checkpoint:
+                status = "corrupt"
+            else:
+                try:
+                    expected_hash = hashlib.sha256(
+                        canonical(checkpoint["data"]).encode()
+                    ).hexdigest()
+                except (TypeError, ValueError):
+                    status = "corrupt"
+                else:
+                    status = (
+                        "valid"
+                        if expected_hash == checkpoint.get("data_hash")
+                        else "corrupt"
+                    )
+    except Exception:
+        metrics.record_vault_operation("checkpoint_verification", "failure")
+        raise
+    metrics.record_vault_operation(
+        "checkpoint_verification", "success" if status == "valid" else "failure"
+    )
+    return status
 
 
 def seal_checkpoint(data):
@@ -264,6 +284,7 @@ class SafetyStateMachine:
         recovery_attempts=0,
         consumed_approvals=None,
         last_event_time=0.0,
+        metrics=None,
     ):
         self.audit_log = audit_log if audit_log is not None else []
         self.state = state
@@ -271,6 +292,8 @@ class SafetyStateMachine:
         self.consumed_approvals = set(consumed_approvals or ())
         self.last_event_time = last_event_time
         self.history = []
+        self.metrics = metrics if metrics is not None else DEFAULT_METRICS
+        self.metrics.set_state(self.state)
 
     def _audit(self, event, **fields):
         record = {"event": event, "state": self.state, **fields}
@@ -286,9 +309,11 @@ class SafetyStateMachine:
         key = (self.state, event)
         if key not in TRANSITIONS:
             raise InvalidTransitionError(f"{event!r} is not valid from state {self.state!r}")
+        from_state = self.state
         new_state = TRANSITIONS[key]
         self.history.append((self.state, event, new_state))
         self.state = new_state
+        self.metrics.record_transition(from_state, new_state, event)
         self._audit(event, new_state=new_state, **fields)
         return self.state
 
@@ -349,6 +374,19 @@ class SafetyStateMachine:
         if not approval_token:
             raise RecoveryError("OPERATOR_APPROVAL_REQUIRED")
 
+        self.metrics.record_vault_operation("recovery", "attempt")
+        try:
+            with self.metrics.time(
+                "vault_operation_seconds", operation="recovery"
+            ):
+                restored = self._request_recovery(checkpoint, approval_token)
+        except Exception:
+            self.metrics.record_vault_operation("recovery", "failure")
+            raise
+        self.metrics.record_vault_operation("recovery", "success")
+        return restored
+
+    def _request_recovery(self, checkpoint, approval_token):
         self.recovery_attempts += 1
         if self.recovery_attempts > self.max_recovery_attempts:
             self._transition("TAMPER_CONFIRMED", reason="recovery attempts exceeded")
@@ -358,7 +396,7 @@ class SafetyStateMachine:
             self._audit("REPLAYED_APPROVAL_REJECTED", token=approval_token)
             raise RecoveryError("REPLAYED_APPROVAL_REJECTED")
 
-        status = verify_checkpoint(checkpoint)
+        status = verify_checkpoint(checkpoint, metrics=self.metrics)
         if status != "valid":
             self._transition("RECOVERY_REQUESTED", checkpoint_status=status)
             self._transition("RECOVERY_FAILED", checkpoint_status=status)
