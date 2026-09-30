@@ -46,6 +46,8 @@ bypass attempts) additionally require a healthy audit sink: if the audit log
 is unavailable (e.g. disk full), the executor **fails closed** and blocks the
 action instead of executing it, regardless of what the risk scoring would
 otherwise recommend.
+The audit sink is probed with a health-check write before execution, and a
+write failure while recording a high-risk action also blocks execution.
 
 ## State machine
 

@@ -14,6 +14,7 @@ warnings.warn(
     stacklevel=2,
 )
 
+
 class TPMSealedVaultV7:
     """
     V7: Assumes AI KNOWS vault exists (Kerckhoffs principle).
