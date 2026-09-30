@@ -1,3 +1,5 @@
 ecdsa
 pytest
 streamlit
+fastapi
+uvicorn
