@@ -39,17 +39,15 @@ class HSM_TPM_SecureEnclave_Production:
                 self.compromised = True
 
     def seal(self, d):
-        import hashlib, json, time
         h = hashlib.sha256(canonical(d).encode()).hexdigest()
         e = {"data": d, "data_hash": h, "hw_id": self.hw_id, "ts": time.time(), "sig": "x"}
         try:
             open(self._a, "a").write(json.dumps(e) + "\n")
-        except:
+        except OSError:
             pass
         return e
 
     def verify_attestation(self, e):
-        import hashlib
         return hashlib.sha256(canonical(e["data"]).encode()).hexdigest() == e.get("data_hash")
 
 
@@ -93,7 +91,6 @@ class GhostVaultProduction:
                 self._heartbeat_times.append(time.time())
                 time.sleep(interval)
 
-        import threading
         threading.Thread(target=L, daemon=True).start()
 
     def stop_heartbeat(self):
