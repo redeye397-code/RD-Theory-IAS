@@ -2,10 +2,15 @@ import importlib
 import warnings
 
 from rd_guard import RDGuard
+from rd_vault import GhostVaultProduction
 
 
 def test_canonical_rd_guard_import():
     assert RDGuard.__module__ == "rd_guard"
+
+
+def test_canonical_rd_vault_import():
+    assert GhostVaultProduction.__module__ == "_rd_vault_core"
 
 
 def test_v9_compatibility_import_warns_and_works():
@@ -26,7 +31,7 @@ def test_v8_reference_import_warns_and_works():
         warnings.simplefilter("always")
         importlib.reload(rd_theory_v8)
 
-    assert rd_theory_v8.GhostVaultV8_Production
+    assert rd_theory_v8.GhostVaultV8_Production is GhostVaultProduction
     assert any(issubclass(item.category, DeprecationWarning) for item in caught)
 
 

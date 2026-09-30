@@ -1,10 +1,10 @@
-from rd_theory_v8 import GhostVaultV8_Production
+from rd_vault import GhostVaultProduction
 import os, json
 def test_tamper_detects():
     audit = "test_tamper.log"
     if os.path.exists(audit): os.remove(audit)
-    v = GhostVaultV8_Production.__new__(GhostVaultV8_Production)
-    from rd_theory_v8 import HSM_TPM_SecureEnclave_Production
+    v = GhostVaultProduction.__new__(GhostVaultProduction)
+    from rd_vault import HSM_TPM_SecureEnclave_Production
     v.tpm = HSM_TPM_SecureEnclave_Production(audit_file=audit)
     v.tpm.seal({"a":1})
     v.tpm.seal({"b":2})
