@@ -1,0 +1,30 @@
+import importlib
+import warnings
+
+from rd_guard import RDGuard
+
+
+def test_canonical_rd_guard_import():
+    assert RDGuard.__module__ == "rd_guard"
+
+
+def test_v9_compatibility_import_warns_and_works():
+    import rd_guard_v9
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        importlib.reload(rd_guard_v9)
+
+    assert rd_guard_v9.RDGuard is RDGuard
+    assert any(issubclass(item.category, DeprecationWarning) for item in caught)
+
+
+def test_v8_reference_import_warns_and_works():
+    import rd_theory_v8
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        importlib.reload(rd_theory_v8)
+
+    assert rd_theory_v8.GhostVaultV8_Production
+    assert any(issubclass(item.category, DeprecationWarning) for item in caught)

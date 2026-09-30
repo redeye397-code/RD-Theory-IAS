@@ -1,4 +1,4 @@
-name: V8 CI
+name: V10 CI
 on: [push, pull_request]
 jobs:
   test:

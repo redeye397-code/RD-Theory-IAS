@@ -1,4 +1,12 @@
 import json,time,hashlib,os,threading
+import warnings
+
+warnings.warn(
+ "rd_theory_v8 is archived; V1-V9 are reference-only and V10 is supported.",
+ DeprecationWarning,
+ stacklevel=2,
+)
+
 def canonical(o):
  return json.dumps(o,sort_keys=True)
 
