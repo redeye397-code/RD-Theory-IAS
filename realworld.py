@@ -2,13 +2,20 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 import time
-from prometheus_client import start_http_server
+
+try:
+    from prometheus_client import start_http_server
+except ImportError:
+    start_http_server = None
+
 from rd_guard import RDGuard
 from rd_guard.v11.config import GuardConfig
 from rd_guard.v11.telemetry.logging import get_logger
 
 # 1. Start metrics on :9090 (your Grafana scrapes this)
-start_http_server(9090)
+if start_http_server is not None:
+    start_http_server(9090)
+
 logger = get_logger("realworld")
 guard = RDGuard(config=GuardConfig(env="prod"))
 
@@ -36,6 +43,7 @@ def check(payload: Payload):
 
 @app.get("/")
 def root():
-    return {"status": "V11.2.0 LIVE", "metrics": "http://localhost:9090/metrics"}
+    metrics_url = "http://localhost:9090/metrics" if start_http_server is not None else "metrics disabled"
+    return {"status": "V11.2.0 LIVE", "metrics": metrics_url}
 
 # Run: uvicorn realworld:app --reload
