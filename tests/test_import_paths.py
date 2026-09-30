@@ -2,6 +2,7 @@ import importlib
 import warnings
 
 from rd_guard import RDGuard
+from rd_executor import GuardedExecutor
 from rd_vault import GhostVaultProduction
 
 
@@ -11,6 +12,10 @@ def test_canonical_rd_guard_import():
 
 def test_canonical_rd_vault_import():
     assert GhostVaultProduction.__module__ == "_rd_vault_core"
+
+
+def test_canonical_rd_executor_import():
+    assert GuardedExecutor.__module__ == "_rd_guard_executor"
 
 
 def test_v9_compatibility_import_warns_and_works():

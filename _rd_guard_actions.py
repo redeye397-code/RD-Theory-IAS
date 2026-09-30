@@ -6,6 +6,53 @@ from datetime import datetime, timezone
 AUDIT_LOG = []
 
 
+class AuditWriteError(RuntimeError):
+    """Raised when an audit record cannot be durably recorded.
+
+    Covers conditions such as audit-disk-full. A full durable, tamper-evident,
+    hash-chained audit log with signed event IDs is explicitly out of scope
+    for V10.0; this is the minimal seam needed so callers (notably
+    ``GuardedExecutor``) can detect audit unavailability and fail closed for
+    high-risk actions, per the V10.0 core safety contract.
+    """
+
+
+class AuditSink:
+    """Thin wrapper around a list-like audit backend with a failure mode.
+
+    Defaults to appending to the process-local ``AUDIT_LOG`` (the same
+    in-memory limitation acknowledged elsewhere in the project), but exposes
+    ``mark_unavailable``/``ensure_available`` so tests and callers can
+    simulate and detect audit unavailability (e.g. disk full) without
+    silently losing high-risk actions.
+    """
+
+    def __init__(self, backend=None):
+        self._backend = AUDIT_LOG if backend is None else backend
+        self._unavailable = False
+
+    def mark_unavailable(self, unavailable=True):
+        self._unavailable = unavailable
+
+    def ensure_available(self):
+        """Raise ``AuditWriteError`` if the sink cannot currently accept writes."""
+        if self._unavailable:
+            raise AuditWriteError("audit log unavailable (e.g. disk full)")
+
+    def append(self, record):
+        self.ensure_available()
+        self._backend.append(record)
+
+    def __len__(self):
+        return len(self._backend)
+
+    def __iter__(self):
+        return iter(self._backend)
+
+    def __getitem__(self, index):
+        return self._backend[index]
+
+
 def knowledge_reduction(agent_state, max_items=None):
     """Prune stale or low-relevance context in place and return the state."""
     context = agent_state.get("context")

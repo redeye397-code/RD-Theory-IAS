@@ -53,13 +53,28 @@ class HSM_TPM_SecureEnclave_Production:
 
 
 class QuorumRate:
-    def __init__(self):
-        self._c = False
+    """Rate-limits recovery/quorum requests to one per bounded time window.
+
+    Historically this only allowed a single request for the lifetime of the
+    object despite the ``RATE_LIMIT_60S`` name implying a rolling 60-second
+    window. It now enforces the intended bounded time-window behavior: a
+    second request is rejected only while it falls within ``window_seconds``
+    of the previous one; once the window elapses, requests are allowed again.
+    """
+
+    def __init__(self, window_seconds=60, clock=time.time):
+        self.window_seconds = window_seconds
+        self._clock = clock
+        self._last_request_time = None
 
     def request(self):
-        if self._c:
+        now = self._clock()
+        if (
+            self._last_request_time is not None
+            and (now - self._last_request_time) < self.window_seconds
+        ):
             raise RuntimeError("RATE_LIMIT_60S")
-        self._c = True
+        self._last_request_time = now
 
 
 class FaultDomain:

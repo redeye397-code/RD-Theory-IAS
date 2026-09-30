@@ -24,6 +24,83 @@ from rd_vault import GhostVaultProduction
 The archived V8 path (`from rd_theory_v8 import GhostVaultV8_Production`)
 remains available as reference and emits a `DeprecationWarning`.
 
+## Canonical action schema and enforcement boundary
+
+Actions observed by RD-Guard are normalized into a canonical, validated
+`CanonicalAction` (type/target/path/resource/command/branch/ci_passed/
+risk_level), and every action that an agent proposes to run must pass
+through `GuardedExecutor` -- the single enforcement boundary:
+
+```python
+from rd_executor import GuardedExecutor
+
+executor = GuardedExecutor()
+result = executor.execute({"action": "read_file", "path": "README.md"}, run=my_run_fn)
+```
+
+`GuardedExecutor.execute()` validates the schema, observes the action with
+`RDGuard`, and only invokes `run` when the action is not hard-blocked by the
+IAS floor. High-risk actions (destructive operations, pushes, alignment
+bypass attempts) additionally require a healthy audit sink: if the audit log
+is unavailable (e.g. disk full), the executor **fails closed** and blocks the
+action instead of executing it, regardless of what the risk scoring would
+otherwise recommend.
+
+## State machine
+
+`GuardedExecutor` drives an explicit `SafetyStateMachine`
+(`from rd_executor import SafetyStateMachine`) with six states:
+
+```text
+NORMAL --STABILIZE--> STABILIZING --STABILIZED--> NORMAL
+NORMAL/STABILIZING/BLOCKED --FLOOR_BLOCK--> BLOCKED --RETRY_ALLOWED--> NORMAL
+NORMAL/STABILIZING/BLOCKED --FAULT--> FAULT
+FAULT --RECOVERY_REQUESTED--> RECOVERING --RECOVERY_SUCCEEDED--> NORMAL
+                                        \--RECOVERY_FAILED--> FAULT
+FAULT/RECOVERING --TAMPER_CONFIRMED--> COMPROMISED  (terminal)
+```
+
+| Transition | Trigger / actor | Reversible | Evidence required | Operator approval | Restart behavior | Repeated attempts | Corrupt/missing checkpoint |
+|---|---|---|---|---|---|---|---|
+| NORMAL → STABILIZING | RDGuard, automatic (risk threshold) | Yes | risk scores | No | resumes STABILIZING | unbounded, self-correcting | N/A |
+| STABILIZING → NORMAL | RDGuard, automatic (risk cleared) | Yes | post-stabilization scores | No | resumes STABILIZING | N/A | N/A |
+| * → BLOCKED | IASFloor, automatic | Yes | FLOOR_BLOCK audit record | No | resumes BLOCKED | independent per action | N/A |
+| BLOCKED → NORMAL | caller retries a compliant action | Yes | new action passes the floor | No | resumes BLOCKED | unbounded | N/A |
+| * → FAULT | system, automatic (e.g. audit unavailable, hardware fault) | No | FAULT record if audit available | Yes (to leave) | **resumes FAULT, not NORMAL** | N/A | N/A |
+| FAULT → RECOVERING | operator supplies checkpoint + single-use approval token | Yes | checkpoint SHA-256 hash match | Yes | consumed tokens/attempt count persist across restart | bounded (`max_recovery_attempts=3`) | missing/corrupt checkpoint rejects the attempt |
+| RECOVERING → NORMAL | automatic, once checkpoint + approval verify | Yes | valid checkpoint + unused token | Yes | N/A | resets attempt counter | N/A |
+| RECOVERING → FAULT | automatic, checkpoint fails verification | Yes | verification failure reason | Yes | resumes FAULT | counted toward the bound | caused by missing/deleted/corrupt checkpoint |
+| FAULT/RECOVERING → COMPROMISED | attempts exceeded, or confirmed tamper | **No** | attempt count, or tamper attestation | Yes | resumes COMPROMISED, no self-recovery | none accepted | terminal |
+
+Additional documented failure modes (see `_rd_state_machine.py` for the
+authoritative, machine-readable `TRANSITION_TABLE`):
+
+- **Audit-disk-full:** state transitions are never lost if the audit sink
+  raises while recording history (the machine degrades gracefully), but
+  `GuardedExecutor` proactively checks audit availability *before* running a
+  high-risk action and fails closed (blocks + enters `FAULT`) if the sink is
+  unavailable.
+- **Corrupted / missing / deleted checkpoints:** `verify_checkpoint()`
+  returns `"missing"` for `None` and `"corrupt"` for anything lacking a
+  matching SHA-256 `data_hash`; either rejects the recovery attempt and
+  counts toward the bounded retry limit. V10.0 does not persist checkpoints
+  as separate files, so "deleted" and "missing" are the same case.
+- **Replayed recovery approvals:** each approval token may only be consumed
+  once (`SafetyStateMachine.consumed_approvals`); reusing a token is rejected
+  with `REPLAYED_APPROVAL_REJECTED` and does not advance the state machine.
+- **Clock rollback:** any recovery request timestamped earlier than the last
+  observed event is rejected with `CLOCK_ROLLBACK_DETECTED` before any other
+  check runs, preventing a rolled-back clock from resurrecting a consumed
+  approval token or an exhausted attempt window.
+
+## Corrected rate limiting
+
+`QuorumRate` (in `rd_vault`) previously permitted only one request for the
+entire lifetime of the object despite its `RATE_LIMIT_60S` name. It now
+enforces the intended bounded 60-second time window: a second request is
+rejected only while it falls within the window of the previous one, and is
+allowed again once the window elapses.
+
 ---
 
 The following material documents the archived V1–V6 design for reference.
