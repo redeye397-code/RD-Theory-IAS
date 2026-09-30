@@ -1,5 +1,4 @@
-ecdsa
-pytest
-streamlit
 fastapi
 uvicorn
+prometheus-client
+pydantic
