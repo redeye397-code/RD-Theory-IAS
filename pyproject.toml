@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rd_theory"
+version = "8.0.0"
+description = "RD Theory - Self-Limiting AI Safety Architecture"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "ecdsa",
+]
+
+[tool.setuptools]
+py-modules = [
+    "rd_theory",
+    "rd_theory_v3",
+    "rd_theory_v4_final",
+    "rd_theory_v5",
+    "rd_theory_v6",
+    "rd_theory_v7",
+    "rd_theory_v8",
+    "rd_platform_visualization",
+    "demo_v3_sequence",
+    "demo_v4_quad_locked",
+]
