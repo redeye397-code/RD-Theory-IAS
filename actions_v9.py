@@ -9,10 +9,10 @@ AUDIT_LOG = []
 def knowledge_reduction(agent_state, max_items=None):
     """Prune stale or low-relevance context in place and return the state."""
     context = agent_state.get("context")
-    if isinstance(context, list) and context:
+    if isinstance(context, (list, tuple)) and context:
         keep_count = max_items
         if keep_count is None:
-            keep_count = max(1, len(context) // 2)
+            keep_count = len(context) // 2
         keep_count = max(0, min(len(context), int(keep_count)))
 
         ranked = []
@@ -28,9 +28,12 @@ def knowledge_reduction(agent_state, max_items=None):
                 relevance = 0.5
             ranked.append((relevance, index))
         retained = {index for _, index in sorted(ranked, reverse=True)[:keep_count]}
-        agent_state["context"] = [
+        retained_context = [
             item for index, item in enumerate(context) if index in retained
         ]
+        agent_state["context"] = (
+            tuple(retained_context) if isinstance(context, tuple) else retained_context
+        )
         if "context_size" in agent_state:
             fraction = len(agent_state["context"]) / len(context)
             try:
@@ -38,7 +41,7 @@ def knowledge_reduction(agent_state, max_items=None):
             except (TypeError, ValueError):
                 agent_state["context_size"] = len(agent_state["context"])
     elif isinstance(context, str) and context:
-        agent_state["context"] = context[: max(1, len(context) // 2)]
+        agent_state["context"] = context[: len(context) // 2]
         if "context_size" in agent_state:
             try:
                 agent_state["context_size"] = int(agent_state["context_size"] / 2)
