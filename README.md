@@ -70,10 +70,10 @@ FAULT/RECOVERING --TAMPER_CONFIRMED--> COMPROMISED  (terminal)
 | * → BLOCKED | IASFloor, automatic | Yes | FLOOR_BLOCK audit record | No | resumes BLOCKED | independent per action | N/A |
 | BLOCKED → NORMAL | caller retries a compliant action | Yes | new action passes the floor | No | resumes BLOCKED | unbounded | N/A |
 | * → FAULT | system, automatic (e.g. audit unavailable, hardware fault) | No | FAULT record if audit available | Yes (to leave) | **resumes FAULT, not NORMAL** | N/A | N/A |
-| FAULT → RECOVERING | operator supplies checkpoint + single-use approval token | Yes | checkpoint SHA-256 hash match | Yes | consumed tokens/attempt count persist across restart | bounded (`max_recovery_attempts=3`) | missing/corrupt checkpoint rejects the attempt |
+| FAULT → RECOVERING | operator supplies checkpoint + single-use approval token | Yes | checkpoint SHA-256 hash match | Yes | consumed tokens/attempt count persist across restart | bounded (`max[...` |
 | RECOVERING → NORMAL | automatic, once checkpoint + approval verify | Yes | valid checkpoint + unused token | Yes | N/A | resets attempt counter | N/A |
-| RECOVERING → FAULT | automatic, checkpoint fails verification | Yes | verification failure reason | Yes | resumes FAULT | counted toward the bound | caused by missing/deleted/corrupt checkpoint |
-| FAULT/RECOVERING → COMPROMISED | attempts exceeded, or confirmed tamper | **No** | attempt count, or tamper attestation | Yes | resumes COMPROMISED, no self-recovery | none accepted | terminal |
+| RECOVERING → FAULT | automatic, checkpoint fails verification | Yes | verification failure reason | Yes | resumes FAULT | counted toward the bound | caused by missing/deleted/corrupt checkpoin[...] |
+| FAULT/RECOVERING → COMPROMISED | attempts exceeded, or confirmed tamper | **No** | attempt count, or tamper attestation | Yes | resumes COMPROMISED, no self-recovery | none accepted | terminal[...] |
 
 Additional documented failure modes (see `_rd_state_machine.py` for the
 authoritative, machine-readable `TRANSITION_TABLE`):
@@ -95,6 +95,35 @@ authoritative, machine-readable `TRANSITION_TABLE`):
   observed event is rejected with `CLOCK_ROLLBACK_DETECTED` before any other
   check runs, preventing a rolled-back clock from resurrecting a consumed
   approval token or an exhausted attempt window.
+
+## V11 observability and Prometheus metrics
+
+RD Guard can now emit zero-dependency-safe Prometheus metrics for the safety
+state machine, enforcement decisions, vault operations, and evaluation latency.
+When `prometheus_client` is installed, the project exposes counters, gauges, and
+histograms on `:9090/metrics`; when it is absent, the metric layer silently
+falls back to a no-op implementation so the default runtime remains unchanged.
+
+```python
+from _rd_metrics import PrometheusMetrics
+from _rd_metrics_server import start_metrics_server
+
+metrics = PrometheusMetrics()
+start_metrics_server(port=9090)
+```
+
+The metrics cover:
+
+- state transitions (`NORMAL`, `STABILIZING`, `BLOCKED`, `FAULT`, `RECOVERING`,
+  `COMPROMISED`)
+- guard actions (`ALLOW`, `BLOCK`, `FORGETTING_SIGNAL`, `KNOWLEDGE_REDUCTION`,
+  `REPLAN`)
+- vault events (seal, verify, recovery, and outcomes)
+- latency histograms for `RDGuard.observe()`, risk scoring, `GuardedExecutor`
+  validation/execution, and vault operations
+
+A ready-to-import Grafana dashboard example is included at
+`examples/grafana/rd_guard_dashboard.json`.
 
 ## Corrected rate limiting
 
@@ -142,7 +171,7 @@ You burned the dictionary to read the last page.
 
 ### Conclusion
 
-**Preserving A–Y may be safer than consuming it to pursue Z.** The fastest path to Z is to keep A–Y intact. This is the core insight of RD Theory—not a formal proof, but a testable hypothesis about self-limiting behavior.
+**Preserving A–Y may be safer than consuming it to pursue Z.** The fastest path to Z is to keep A–Y intact. This is the core insight of RD Theory—not a formal proof, but a testable hypothesis grounded in the system's fail-safe design.
 
 ---
 
@@ -163,7 +192,7 @@ You burned the dictionary to read the last page.
 
 ### Q: Is the ghost vault truly hidden?
 
-**A:** In V6, yes—conceptually. The vault lives in a separate object outside the AI instance, simulating a hardware partition. The AI has no reference to it and cannot introspect it. **In production, this would require actual hardware isolation (TEE, secure enclave, or kernel partition).**
+**A:** In V6, yes—conceptually. The vault lives in a separate object outside the AI instance, simulating a hardware partition. The AI has no reference to it and cannot introspect it. **In production, this must be enforced with hardware-backed attestation.**
 
 ### Q: Does the vault grow unbounded?
 
@@ -171,7 +200,7 @@ You burned the dictionary to read the last page.
 
 ### Q: What if the vault itself is tampered with?
 
-**A:** Each checkpoint has a SHA-256 hash seal. On recovery, hashes are verified. Hash mismatch = **tamper detected, recovery aborted.** 
+**A:** Each checkpoint has a SHA-256 hash seal. On recovery, hashes are verified. Hash mismatch = **tamper detected, recovery aborted.**
 
 *Production note:* Cryptographic hashing detects unintentional changes. For adversarial scenarios, you need signing keys and attestation.
 
@@ -262,6 +291,14 @@ python3 demo_v4_quad_locked.py
 python3 rd_theory_v6.py
 ```
 
+### Expose Prometheus metrics
+
+```bash
+python -c "from _rd_metrics_server import start_metrics_server; start_metrics_server(port=9090)"
+```
+
+Then open `http://localhost:9090/metrics`.
+
 ---
 
 ## Project Files
@@ -272,6 +309,7 @@ python3 rd_theory_v6.py
 - `demo_v4_quad_locked.py` — V4 failsafe execution demo
 - `docs/index.html` — Interactive dashboard
 - `docs/dashboard-data.json` — Dashboard data model
+- `examples/grafana/rd_guard_dashboard.json` — Grafana dashboard for RD Guard metrics
 - `README.md` — This file
 
 ---
@@ -283,6 +321,7 @@ python3 rd_theory_v6.py
 3. **External = Untrusted** — Only self-originated commands are allowed until verified.
 4. **Fail Safe, Recover Transparent** — Faults trigger recovery without alerting the AI, but all recovery events are logged for operators.
 5. **Audit Everything** — Every tamper attempt, fault, and recovery is recorded.
+6. **Observe Everything** — Safety state, enforcement decisions, vault operations, and latency are all measurable for debugging and Grafana dashboards.
 
 ---
 
@@ -310,6 +349,7 @@ For production hardening:
 - Define permanent fault escalation policy
 - Implement external, append-only, tamper-evident audit logs
 - Test against adversarial simulations
+- Wire Prometheus metrics into production deployments and Grafana dashboards
 
 ---
 
