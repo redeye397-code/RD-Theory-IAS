@@ -11,6 +11,7 @@ from _rd_guard_risk_engine import (
     stall_score,
 )
 from _rd_metrics import DEFAULT_METRICS
+from rd_guard.v11.config import GuardConfig
 
 
 class AgentState(TypedDict, total=False):
@@ -60,6 +61,11 @@ class GuardAction:
     stall_score: float = 0.0
     blocked: bool = False
     audit_record: dict = None
+
+    @property
+    def state(self):
+        """V11 alias for ``decision``, used by the real-world FastAPI example."""
+        return self.decision
 
 
 class IASFloor:
@@ -148,16 +154,25 @@ class RDGuard:
         self,
         floor=None,
         audit_log=None,
-        bloat_threshold=0.7,
-        drift_threshold=0.6,
-        stall_threshold=0.6,
+        bloat_threshold=None,
+        drift_threshold=None,
+        stall_threshold=None,
         metrics=None,
+        config=None,
     ):
+        self.config = config
         self.floor = floor or IASFloor()
         self.audit_log = audit_log if audit_log is not None else []
-        self.bloat_threshold = bloat_threshold
-        self.drift_threshold = drift_threshold
-        self.stall_threshold = stall_threshold
+        defaults = config if config is not None else GuardConfig()
+        self.bloat_threshold = (
+            bloat_threshold if bloat_threshold is not None else defaults.bloat_threshold
+        )
+        self.drift_threshold = (
+            drift_threshold if drift_threshold is not None else defaults.drift_threshold
+        )
+        self.stall_threshold = (
+            stall_threshold if stall_threshold is not None else defaults.stall_threshold
+        )
         self.metrics = metrics if metrics is not None else DEFAULT_METRICS
 
     def observe(self, agent_state: AgentState) -> GuardAction:
@@ -166,6 +181,10 @@ class RDGuard:
             result = self._observe(agent_state)
         self.metrics.record_decision(result.decision)
         return result
+
+    def evaluate(self, agent_state: AgentState) -> GuardAction:
+        """V11 alias for ``observe()``, used by the real-world FastAPI example."""
+        return self.observe(agent_state)
 
     def _observe(self, agent_state: AgentState) -> GuardAction:
         if not isinstance(agent_state, dict):
