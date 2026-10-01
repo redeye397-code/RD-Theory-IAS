@@ -43,6 +43,9 @@ def _metrics_enabled():
 
 
 def _display_host(host):
+    # Wildcard bind addresses are not valid as a client-facing hostname, so
+    # substitute "localhost" for display; bare IPv6 addresses need brackets
+    # when embedded in a URL (e.g. "::1" -> "[::1]").
     if host in {"0.0.0.0", "::", ""}:
         return "localhost"
     if ":" in host and not host.startswith("["):
@@ -59,11 +62,16 @@ def _start_metrics():
     host = os.environ.get("RD_GUARD_METRICS_HOST", "0.0.0.0")
     try:
         port = int(os.environ.get("RD_GUARD_METRICS_PORT", "9090"))
+    except ValueError as exc:
+        logger.warning("Invalid RD_GUARD_METRICS_PORT value: %s", exc)
+        return
+
+    try:
         app.state.metrics_server = start_metrics_server(
             host=host, port=port, metrics=DEFAULT_METRICS
         )
         app.state.metrics_display_host = _display_host(host)
-    except (OSError, ValueError, OverflowError) as exc:
+    except (OSError, OverflowError) as exc:
         logger.warning("Prometheus metrics server could not start: %s", exc)
 
 

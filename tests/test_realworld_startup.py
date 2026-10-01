@@ -181,6 +181,20 @@ def test_realworld_metrics_port_conflict_does_not_stop_app(monkeypatch):
             assert blocked.json()["blocked"] is True
 
 
+def test_realworld_invalid_metrics_port_does_not_stop_app(monkeypatch):
+    fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    realworld = importlib.import_module("realworld")
+    monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "true")
+    monkeypatch.setenv("RD_GUARD_METRICS_PORT", "not-a-port")
+    monkeypatch.setattr(realworld.DEFAULT_METRICS, "enabled", True)
+
+    with fastapi_testclient.TestClient(realworld.app) as client:
+        assert client.get("/").status_code == 200
+        assert client.get("/").json()["metrics"] == "metrics unavailable"
+        allowed = client.post("/check", json={"data": {"action": "read_file"}})
+        assert allowed.json()["blocked"] is False
+
+
 def test_readme_documents_cross_shell_install_and_startup_commands():
     repo_root = Path(__file__).parents[1]
     readme = (repo_root / "README.md").read_text()

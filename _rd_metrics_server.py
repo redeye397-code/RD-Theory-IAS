@@ -63,6 +63,12 @@ def start_metrics_server(host=None, port=None, metrics=None):
 def stop_metrics_server(host, port):
     """Shut down and deregister the cached listener for ``(host, port)``.
 
+    ``port`` must match the value originally passed to ``start_metrics_server``
+    (the requested port), not the OS-assigned ``server.server_port`` that
+    results from requesting an ephemeral port with ``port=0``: the cache is
+    keyed by the requested address, so a listener started with ``port=0`` must
+    also be stopped with ``port=0``.
+
     Callers that manage a server's lifecycle directly (for example tests that
     call ``server.shutdown()``/``server.server_close()`` themselves) should use
     this instead so the module-level cache does not retain a stale, closed
