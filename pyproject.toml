@@ -22,7 +22,6 @@ py-modules = [
     "rd_theory_v7",
     "rd_theory_v8",
     "rd_guard_v9",
-    "rd_guard",
     "rd_executor",
     "_rd_guard_actions",
     "_rd_guard_risk_engine",
@@ -40,3 +39,7 @@ py-modules = [
     "demo_v3_sequence",
     "demo_v4_quad_locked",
 ]
+
+[tool.setuptools.packages.find]
+include = ["rd_guard", "rd_guard.*"]
+

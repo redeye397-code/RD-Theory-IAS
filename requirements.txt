@@ -1,4 +1,8 @@
+ecdsa
+pytest
+streamlit
 fastapi
 uvicorn
-prometheus-client
 pydantic
+httpx
+prometheus_client

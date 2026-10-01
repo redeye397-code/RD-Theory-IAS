@@ -8,9 +8,24 @@ try:
 except ImportError:
     start_http_server = None
 
-from rd_guard import RDGuard
-from rd_guard.v11.config import GuardConfig
-from rd_guard.v11.telemetry.logging import get_logger
+try:
+    from rd_guard import RDGuard
+    from rd_guard.v11.config import GuardConfig
+    from rd_guard.v11.telemetry.logging import get_logger
+except ImportError as exc:
+    missing = getattr(exc, "name", None) or ""
+    if missing == "rd_guard" or missing.startswith("rd_guard."):
+        raise ImportError(
+            f"realworld.py (V11.2.0) could not import '{missing}' ({exc}). "
+            "This usually means the repository was not installed, or the "
+            "rd_guard/v11/ submodules are missing. Fix: run "
+            "`python -m pip install -e .` from the repository root, and "
+            "confirm these files exist: rd_guard/__init__.py, "
+            "rd_guard/v11/config.py, rd_guard/v11/telemetry/logging.py. See "
+            "README.md 'Run the V11.2.0 real-world app' for the expected "
+            "layout and startup command."
+        ) from exc
+    raise
 
 # 1. Start metrics on :9090 (your Grafana scrapes this)
 if start_http_server is not None:

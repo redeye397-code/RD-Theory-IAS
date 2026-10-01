@@ -185,6 +185,52 @@ This estimates p95 `GuardedExecutor.execute()` latency over a rolling five
 minutes. Compare it with the validation and observation histograms to localize
 cost before making performance changes.
 
+## Run the V11.2.0 real-world app
+
+`realworld.py` at the repository root is the V11.2.0 FastAPI entrypoint. It
+imports from the `rd_guard` package layout below -- all of these files must be
+present (they are installed by `python -m pip install -e .`):
+
+```text
+rd_guard/
+├── __init__.py                 # RDGuard, GuardAction (stable `from rd_guard import RDGuard`)
+└── v11/
+    ├── __init__.py
+    ├── config.py                # GuardConfig
+    └── telemetry/
+        ├── __init__.py
+        └── logging.py           # get_logger
+```
+
+Runtime dependencies (`fastapi`, `uvicorn`, `pydantic`, `httpx`,
+`prometheus_client`) are declared in `requirements.txt`. `httpx` is required
+by Starlette's `TestClient` (used in `tests/test_realworld_startup.py`), and
+`prometheus_client` is optional at runtime -- if it is not installed, the `:9090`
+metrics server is simply skipped instead of crashing the app.
+
+Install dependencies and start the app from the repository root:
+
+```bash
+pip install -r requirements.txt
+python -m pip install -e .
+uvicorn realworld:app --reload
+```
+
+For a production-style start (binding all interfaces and honoring a `PORT`
+environment variable, as most hosting providers expect):
+
+```bash
+uvicorn realworld:app --host 0.0.0.0 --port ${PORT:-8000}
+```
+
+`GET /` reports `{"status": "V11.2.0 LIVE", ...}` once the server is running,
+and `POST /check` with `{"data": {...}}` returns the guard's decision
+(`state`, `blocked`, `latency_ms`). If any of the files above are missing --
+for example after a partial file copy into a fresh Codespace -- `realworld.py`
+raises an `ImportError` at startup naming the missing module and the fix
+(reinstall the package and confirm the `rd_guard/v11/` files exist), instead
+of exiting silently.
+
 ## V11 roadmap
 
 V11.2.0 is the supported release, delivering **V11.2: onboarding and product
