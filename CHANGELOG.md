@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Fixed a V11.2.0 startup regression: `realworld.py` imported
+  `rd_guard.v11.config` and `rd_guard.v11.telemetry.logging`, but `rd_guard`
+  was a flat module with no `v11` submodules, so the app failed on import.
+  `rd_guard` is now a package (`rd_guard/__init__.py`, preserving the stable
+  `from rd_guard import RDGuard` path) with the `rd_guard/v11/config.py`
+  (`GuardConfig`) and `rd_guard/v11/telemetry/logging.py` (`get_logger`)
+  files the entrypoint expects. Added `RDGuard(config=...)` support and an
+  `evaluate()`/`GuardAction.state` alias used by `realworld.py`.
+- `realworld.py` now raises an actionable `ImportError` (naming the missing
+  module and the fix) instead of failing silently if the `rd_guard` package
+  layout is incomplete.
+
 ## 11.2.0 — September 30, 2026
 
 - Positioned RD Guard in the README and added local installation and an

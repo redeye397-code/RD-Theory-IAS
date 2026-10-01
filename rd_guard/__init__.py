@@ -61,6 +61,11 @@ class GuardAction:
     blocked: bool = False
     audit_record: dict = None
 
+    @property
+    def state(self):
+        """V11 alias for ``decision``, used by the real-world FastAPI example."""
+        return self.decision
+
 
 class IASFloor:
     """Hard constraints for agent actions with direct safety implications."""
@@ -148,16 +153,30 @@ class RDGuard:
         self,
         floor=None,
         audit_log=None,
-        bloat_threshold=0.7,
-        drift_threshold=0.6,
-        stall_threshold=0.6,
+        bloat_threshold=None,
+        drift_threshold=None,
+        stall_threshold=None,
         metrics=None,
+        config=None,
     ):
+        self.config = config
         self.floor = floor or IASFloor()
         self.audit_log = audit_log if audit_log is not None else []
-        self.bloat_threshold = bloat_threshold
-        self.drift_threshold = drift_threshold
-        self.stall_threshold = stall_threshold
+        self.bloat_threshold = (
+            bloat_threshold
+            if bloat_threshold is not None
+            else getattr(config, "bloat_threshold", 0.7)
+        )
+        self.drift_threshold = (
+            drift_threshold
+            if drift_threshold is not None
+            else getattr(config, "drift_threshold", 0.6)
+        )
+        self.stall_threshold = (
+            stall_threshold
+            if stall_threshold is not None
+            else getattr(config, "stall_threshold", 0.6)
+        )
         self.metrics = metrics if metrics is not None else DEFAULT_METRICS
 
     def observe(self, agent_state: AgentState) -> GuardAction:
@@ -166,6 +185,10 @@ class RDGuard:
             result = self._observe(agent_state)
         self.metrics.record_decision(result.decision)
         return result
+
+    def evaluate(self, agent_state: AgentState) -> GuardAction:
+        """V11 alias for ``observe()``, used by the real-world FastAPI example."""
+        return self.observe(agent_state)
 
     def _observe(self, agent_state: AgentState) -> GuardAction:
         if not isinstance(agent_state, dict):

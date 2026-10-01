@@ -185,6 +185,38 @@ This estimates p95 `GuardedExecutor.execute()` latency over a rolling five
 minutes. Compare it with the validation and observation histograms to localize
 cost before making performance changes.
 
+## Run the V11.2.0 real-world app
+
+`realworld.py` at the repository root is the V11.2.0 FastAPI entrypoint. It
+imports from the `rd_guard` package layout below -- all of these files must be
+present (they are installed by `python -m pip install -e .`):
+
+```text
+rd_guard/
+├── __init__.py                 # RDGuard, GuardAction (stable `from rd_guard import RDGuard`)
+└── v11/
+    ├── __init__.py
+    ├── config.py                # GuardConfig
+    └── telemetry/
+        ├── __init__.py
+        └── logging.py           # get_logger
+```
+
+Start the app from the repository root:
+
+```bash
+python -m pip install -e .
+uvicorn realworld:app --reload
+```
+
+`GET /` reports `{"status": "V11.2.0 LIVE", ...}` once the server is running,
+and `POST /check` with `{"data": {...}}` returns the guard's decision
+(`state`, `blocked`, `latency_ms`). If any of the files above are missing --
+for example after a partial file copy into a fresh Codespace -- `realworld.py`
+raises an `ImportError` at startup naming the missing module and the fix
+(reinstall the package and confirm the `rd_guard/v11/` files exist), instead
+of exiting silently.
+
 ## V11 roadmap
 
 V11.2.0 is the supported release, delivering **V11.2: onboarding and product
