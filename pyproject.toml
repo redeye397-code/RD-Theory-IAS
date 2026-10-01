@@ -12,15 +12,6 @@ dependencies = [
     "ecdsa",
 ]
 
-[project.optional-dependencies]
-realworld = [
-    "fastapi",
-    "uvicorn",
-    "pydantic",
-    "httpx",
-    "prometheus_client",
-]
-
 [tool.setuptools]
 py-modules = [
     "rd_theory",
