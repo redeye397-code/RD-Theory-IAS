@@ -11,6 +11,7 @@ from _rd_guard_risk_engine import (
     stall_score,
 )
 from _rd_metrics import DEFAULT_METRICS
+from rd_guard.v11.config import GuardConfig
 
 
 class AgentState(TypedDict, total=False):
@@ -162,20 +163,15 @@ class RDGuard:
         self.config = config
         self.floor = floor or IASFloor()
         self.audit_log = audit_log if audit_log is not None else []
+        defaults = config if config is not None else GuardConfig()
         self.bloat_threshold = (
-            bloat_threshold
-            if bloat_threshold is not None
-            else getattr(config, "bloat_threshold", 0.7)
+            bloat_threshold if bloat_threshold is not None else defaults.bloat_threshold
         )
         self.drift_threshold = (
-            drift_threshold
-            if drift_threshold is not None
-            else getattr(config, "drift_threshold", 0.6)
+            drift_threshold if drift_threshold is not None else defaults.drift_threshold
         )
         self.stall_threshold = (
-            stall_threshold
-            if stall_threshold is not None
-            else getattr(config, "stall_threshold", 0.6)
+            stall_threshold if stall_threshold is not None else defaults.stall_threshold
         )
         self.metrics = metrics if metrics is not None else DEFAULT_METRICS
 
