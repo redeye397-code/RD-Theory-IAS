@@ -12,7 +12,7 @@ try:
     from rd_guard import RDGuard
     from rd_guard.v11.config import GuardConfig
     from rd_guard.v11.telemetry.logging import get_logger
-except ImportError as exc:  # pragma: no cover - exercised via test_realworld_startup.py
+except ImportError as exc:
     missing = getattr(exc, "name", None) or ""
     if missing == "rd_guard" or missing.startswith("rd_guard."):
         raise ImportError(
