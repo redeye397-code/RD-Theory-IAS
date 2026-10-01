@@ -60,6 +60,31 @@ def test_metrics_http_server_reuses_same_listener():
         first_server.server_close()
 
 
+def test_metrics_http_server_closes_stale_listener_before_replacing():
+    import socket
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    metrics_a = PrometheusMetrics(prometheus_client=None)
+    metrics_b = PrometheusMetrics(prometheus_client=None)
+    first_server = start_metrics_server("127.0.0.1", port, metrics_a)
+    try:
+        # Requesting a different ``metrics`` object for the same address should
+        # replace (not leak) the existing listener, freeing the port so the
+        # new server can bind without raising "Address already in use".
+        second_server = start_metrics_server("127.0.0.1", port, metrics_b)
+        try:
+            assert second_server is not first_server
+            assert first_server.fileno() == -1
+        finally:
+            second_server.shutdown()
+            second_server.server_close()
+    finally:
+        first_server.server_close()
+
+
 def test_metrics_http_server_exposes_prometheus_samples():
     prometheus_client = pytest.importorskip("prometheus_client")
     metrics = PrometheusMetrics(registry=prometheus_client.CollectorRegistry())

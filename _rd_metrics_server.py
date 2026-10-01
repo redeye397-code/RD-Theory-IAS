@@ -46,6 +46,9 @@ def start_metrics_server(host=None, port=None, metrics=None):
             ):
                 return existing
             _servers.pop(address, None)
+            if existing.fileno() >= 0:
+                existing.shutdown()
+                existing.server_close()
 
         server = ThreadingHTTPServer(address, _MetricsHandler)
         server.daemon_threads = True

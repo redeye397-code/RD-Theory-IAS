@@ -42,8 +42,17 @@ def _metrics_enabled():
     return DEFAULT_METRICS.enabled and setting not in disabled_values
 
 
+def _display_host(host):
+    if host in {"0.0.0.0", "::", ""}:
+        return "localhost"
+    if ":" in host and not host.startswith("["):
+        return f"[{host}]"
+    return host
+
+
 def _start_metrics():
     app.state.metrics_server = None
+    app.state.metrics_display_host = None
     if not _metrics_enabled():
         return
 
@@ -53,6 +62,7 @@ def _start_metrics():
         app.state.metrics_server = start_metrics_server(
             host=host, port=port, metrics=DEFAULT_METRICS
         )
+        app.state.metrics_display_host = _display_host(host)
     except (OSError, ValueError, OverflowError) as exc:
         logger.warning("Prometheus metrics server could not start: %s", exc)
 
@@ -65,6 +75,7 @@ async def _lifespan(_app):
 
 app = FastAPI(title="RD Guard V11.2.0 — Real World", lifespan=_lifespan)
 app.state.metrics_server = None
+app.state.metrics_display_host = None
 
 
 def _metrics_url():
@@ -72,11 +83,7 @@ def _metrics_url():
     if server is None:
         return "metrics unavailable" if _metrics_enabled() else "metrics disabled"
 
-    host = os.environ.get("RD_GUARD_METRICS_HOST", "0.0.0.0")
-    if host in {"0.0.0.0", "::", ""}:
-        host = "localhost"
-    elif ":" in host and not host.startswith("["):
-        host = f"[{host}]"
+    host = app.state.metrics_display_host
     return f"http://{host}:{server.server_port}/metrics"
 
 class Payload(BaseModel):
