@@ -60,4 +60,20 @@ def start_metrics_server(host=None, port=None, metrics=None):
         return server
 
 
-__all__ = ["start_metrics_server"]
+def stop_metrics_server(host, port):
+    """Shut down and deregister the cached listener for ``(host, port)``.
+
+    Callers that manage a server's lifecycle directly (for example tests that
+    call ``server.shutdown()``/``server.server_close()`` themselves) should use
+    this instead so the module-level cache does not retain a stale, closed
+    entry indefinitely.
+    """
+    address = (host, port)
+    with _servers_lock:
+        existing = _servers.pop(address, None)
+        if existing is not None and existing.fileno() >= 0:
+            existing.shutdown()
+            existing.server_close()
+
+
+__all__ = ["start_metrics_server", "stop_metrics_server"]

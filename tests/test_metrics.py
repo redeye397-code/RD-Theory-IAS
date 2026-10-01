@@ -6,7 +6,7 @@ from urllib.request import urlopen
 import pytest
 
 from _rd_metrics import PrometheusMetrics
-from _rd_metrics_server import start_metrics_server
+from _rd_metrics_server import start_metrics_server, stop_metrics_server
 from _rd_state_machine import RecoveryError, SafetyStateMachine, seal_checkpoint
 from _rd_vault_core import GhostVaultProduction
 from rd_guard import RDGuard
@@ -75,14 +75,10 @@ def test_metrics_http_server_closes_stale_listener_before_replacing():
         # replace (not leak) the existing listener, freeing the port so the
         # new server can bind without raising "Address already in use".
         second_server = start_metrics_server("127.0.0.1", port, metrics_b)
-        try:
-            assert second_server is not first_server
-            assert first_server.fileno() == -1
-        finally:
-            second_server.shutdown()
-            second_server.server_close()
+        assert second_server is not first_server
+        assert first_server.fileno() == -1
     finally:
-        first_server.server_close()
+        stop_metrics_server("127.0.0.1", port)
 
 
 def test_metrics_http_server_exposes_prometheus_samples():
