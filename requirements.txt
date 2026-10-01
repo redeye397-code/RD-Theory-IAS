@@ -3,3 +3,6 @@ pytest
 streamlit
 fastapi
 uvicorn
+pydantic
+httpx
+prometheus_client

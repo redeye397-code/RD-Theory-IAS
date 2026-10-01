@@ -202,11 +202,25 @@ rd_guard/
         └── logging.py           # get_logger
 ```
 
-Start the app from the repository root:
+Runtime dependencies (`fastapi`, `uvicorn`, `pydantic`, `httpx`,
+`prometheus_client`) are declared in `requirements.txt`. `httpx` is required
+by Starlette's `TestClient` (used in `tests/test_realworld_startup.py`), and
+`prometheus_client` is optional at runtime -- if it is not installed, the `:9090`
+metrics server is simply skipped instead of crashing the app.
+
+Install dependencies and start the app from the repository root:
 
 ```bash
+pip install -r requirements.txt
 python -m pip install -e .
 uvicorn realworld:app --reload
+```
+
+For a production-style start (binding all interfaces and honoring a `PORT`
+environment variable, as most hosting providers expect):
+
+```bash
+uvicorn realworld:app --host 0.0.0.0 --port ${PORT:-8000}
 ```
 
 `GET /` reports `{"status": "V11.2.0 LIVE", ...}` once the server is running,
