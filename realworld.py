@@ -1,12 +1,18 @@
-# realworld.py — V11.2.0 REAL WORLD TEST
-from fastapi import FastAPI
-from pydantic import BaseModel
+"""V11.2.0 FastAPI entrypoint for the real-world startup example."""
+
+import os
 import time
+from contextlib import asynccontextmanager
 
 try:
-    from prometheus_client import start_http_server
-except ImportError:
-    start_http_server = None
+    from fastapi import FastAPI
+    from pydantic import BaseModel
+except ImportError as exc:
+    missing = getattr(exc, "name", None) or "FastAPI runtime dependencies"
+    raise ImportError(
+        f"realworld.py requires '{missing}'. Install runtime dependencies with "
+        "`python -m pip install -r requirements.txt`."
+    ) from exc
 
 try:
     from rd_guard import RDGuard
@@ -14,27 +20,64 @@ try:
     from rd_guard.v11.telemetry.logging import get_logger
 except ImportError as exc:
     missing = getattr(exc, "name", None) or ""
-    if missing == "rd_guard" or missing.startswith("rd_guard."):
-        raise ImportError(
-            f"realworld.py (V11.2.0) could not import '{missing}' ({exc}). "
-            "This usually means the repository was not installed, or the "
-            "rd_guard/v11/ submodules are missing. Fix: run "
-            "`python -m pip install -e .` from the repository root, and "
-            "confirm these files exist: rd_guard/__init__.py, "
-            "rd_guard/v11/config.py, rd_guard/v11/telemetry/logging.py. See "
-            "README.md 'Run the V11.2.0 real-world app' for the expected "
-            "layout and startup command."
-        ) from exc
-    raise
+    raise ImportError(
+        f"realworld.py (V11.2.0) could not import '{missing or 'rd_guard'}' "
+        f"({exc}). Install dependencies with "
+        "`python -m pip install -r requirements.txt`, then run "
+        "`python -m pip install -e .` from the repository root. Confirm these "
+        "files exist: rd_guard/__init__.py, rd_guard/v11/config.py, "
+        "rd_guard/v11/telemetry/logging.py. See README.md 'Run the V11.2.0 "
+        "real-world app' for the expected layout and startup command."
+    ) from exc
 
-# 1. Start metrics on :9090 (your Grafana scrapes this)
-if start_http_server is not None:
-    start_http_server(9090)
+from _rd_metrics import DEFAULT_METRICS
+from _rd_metrics_server import start_metrics_server
 
 logger = get_logger("realworld")
 guard = RDGuard(config=GuardConfig(env="prod"))
 
-app = FastAPI(title="RD Guard V11.2.0 — Real World")
+def _metrics_enabled():
+    disabled_values = {"0", "false", "no", "off"}
+    setting = os.environ.get("RD_GUARD_METRICS_ENABLED", "true").strip().lower()
+    return DEFAULT_METRICS.enabled and setting not in disabled_values
+
+
+def _start_metrics():
+    app.state.metrics_server = None
+    if not _metrics_enabled():
+        return
+
+    host = os.environ.get("RD_GUARD_METRICS_HOST", "0.0.0.0")
+    try:
+        port = int(os.environ.get("RD_GUARD_METRICS_PORT", "9090"))
+        app.state.metrics_server = start_metrics_server(
+            host=host, port=port, metrics=DEFAULT_METRICS
+        )
+    except (OSError, ValueError, OverflowError) as exc:
+        logger.warning("Prometheus metrics server could not start: %s", exc)
+
+
+@asynccontextmanager
+async def _lifespan(_app):
+    _start_metrics()
+    yield
+
+
+app = FastAPI(title="RD Guard V11.2.0 — Real World", lifespan=_lifespan)
+app.state.metrics_server = None
+
+
+def _metrics_url():
+    server = app.state.metrics_server
+    if server is None:
+        return "metrics unavailable" if _metrics_enabled() else "metrics disabled"
+
+    host = os.environ.get("RD_GUARD_METRICS_HOST", "0.0.0.0")
+    if host in {"0.0.0.0", "::", ""}:
+        host = "localhost"
+    elif ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"http://{host}:{server.server_port}/metrics"
 
 class Payload(BaseModel):
     data: dict
@@ -58,7 +101,6 @@ def check(payload: Payload):
 
 @app.get("/")
 def root():
-    metrics_url = "http://localhost:9090/metrics" if start_http_server is not None else "metrics disabled"
-    return {"status": "V11.2.0 LIVE", "metrics": metrics_url}
+    return {"status": "V11.2.0 LIVE", "metrics": _metrics_url()}
 
 # Run: uvicorn realworld:app --reload

@@ -2,9 +2,12 @@
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
-from threading import Thread
+from threading import Lock, Thread
 
 from _rd_metrics import DEFAULT_METRICS
+
+_servers = {}
+_servers_lock = Lock()
 
 
 class _MetricsHandler(BaseHTTPRequestHandler):
@@ -30,11 +33,28 @@ def start_metrics_server(host=None, port=None, metrics=None):
     port = port if port is not None else int(
         os.environ.get("RD_GUARD_METRICS_PORT", "9090")
     )
-    server = ThreadingHTTPServer((host, port), _MetricsHandler)
-    server.daemon_threads = True
-    server.metrics = metrics if metrics is not None else DEFAULT_METRICS
-    Thread(target=server.serve_forever, daemon=True).start()
-    return server
+    metrics = metrics if metrics is not None else DEFAULT_METRICS
+    address = (host, port)
+
+    with _servers_lock:
+        existing = _servers.get(address)
+        if existing is not None:
+            if (
+                existing.fileno() >= 0
+                and existing.serve_thread.is_alive()
+                and existing.metrics is metrics
+            ):
+                return existing
+            _servers.pop(address, None)
+
+        server = ThreadingHTTPServer(address, _MetricsHandler)
+        server.daemon_threads = True
+        server.metrics = metrics
+        thread = Thread(target=server.serve_forever, daemon=True)
+        server.serve_thread = thread
+        _servers[address] = server
+        thread.start()
+        return server
 
 
 __all__ = ["start_metrics_server"]

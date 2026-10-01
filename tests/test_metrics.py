@@ -50,6 +50,16 @@ def test_metrics_http_server_exposes_metrics_path():
         server.server_close()
 
 
+def test_metrics_http_server_reuses_same_listener():
+    metrics = PrometheusMetrics(prometheus_client=None)
+    first_server = start_metrics_server("127.0.0.1", 0, metrics)
+    try:
+        assert start_metrics_server("127.0.0.1", 0, metrics) is first_server
+    finally:
+        first_server.shutdown()
+        first_server.server_close()
+
+
 def test_metrics_http_server_exposes_prometheus_samples():
     prometheus_client = pytest.importorskip("prometheus_client")
     metrics = PrometheusMetrics(registry=prometheus_client.CollectorRegistry())
