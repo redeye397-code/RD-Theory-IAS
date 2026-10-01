@@ -79,6 +79,12 @@ def _start_metrics():
 async def _lifespan(_app):
     _start_metrics()
     yield
+    # Deliberately not stopped here: the metrics listener is cached and reused
+    # by host/port (see _rd_metrics_server.start_metrics_server) so it keeps
+    # serving scrapes across app restarts/reloads (e.g. `uvicorn --reload`)
+    # instead of dropping and rebinding the socket on every reload. Use
+    # `_rd_metrics_server.stop_metrics_server(host, port)` to explicitly
+    # release a listener when a process is shutting down for good.
 
 
 app = FastAPI(title="RD Guard V11.2.0 — Real World", lifespan=_lifespan)
