@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 11.2.2 — October 2, 2026
+
+- Kept the stable V11 API and fail-closed enforcement model while making
+  v11.2.2 the supported deployment-hardening release.
+- Strengthened production guidance for deployment boundaries, trusted metrics
+  networks, durable audit storage, recovery operators, and readiness checks.
+- Made invalid metrics-port and listener-bind warnings more actionable; metrics
+  remain optional and these failures do not prevent app startup.
+
 ## 11.2.1 — October 2, 2026
 
 - Deferred the real-world app's Prometheus listener until FastAPI startup,

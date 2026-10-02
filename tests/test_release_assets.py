@@ -6,11 +6,12 @@ ROOT = Path(__file__).parents[1]
 
 
 def test_release_version_and_changelog_are_consistent():
-    assert 'version = "11.2.1"' in (ROOT / "pyproject.toml").read_text()
-    assert '__version__ = "11.2.1"' in (ROOT / "__init__.py").read_text()
-    assert "# RD Theory V11.2.1" in (ROOT / "README.md").read_text()
+    assert 'version = "11.2.2"' in (ROOT / "pyproject.toml").read_text()
+    assert '__version__ = "11.2.2"' in (ROOT / "__init__.py").read_text()
+    assert "# RD Theory V11.2.2" in (ROOT / "README.md").read_text()
     changelog = (ROOT / "CHANGELOG.md").read_text()
-    assert "## Unreleased\n\n## 11.2.1 — October 2, 2026" in changelog
+    assert "## Unreleased\n\n## 11.2.2 — October 2, 2026" in changelog
+    assert '"V11.2.2 LIVE"' in (ROOT / "realworld.py").read_text()
 
 
 def test_container_monitoring_assets_are_present_and_linked():
