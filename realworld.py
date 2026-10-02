@@ -42,18 +42,36 @@ def _metrics_enabled():
     return DEFAULT_METRICS.enabled and setting not in disabled_values
 
 
+def _display_host(host):
+    # Wildcard bind addresses are not valid as a client-facing hostname, so
+    # substitute "localhost" for display; bare IPv6 addresses need brackets
+    # when embedded in a URL (e.g. "::1" -> "[::1]").
+    if host in {"0.0.0.0", "::", ""}:
+        return "localhost"
+    if ":" in host and not host.startswith("["):
+        return f"[{host}]"
+    return host
+
+
 def _start_metrics():
     app.state.metrics_server = None
+    app.state.metrics_display_host = None
     if not _metrics_enabled():
         return
 
     host = os.environ.get("RD_GUARD_METRICS_HOST", "0.0.0.0")
     try:
         port = int(os.environ.get("RD_GUARD_METRICS_PORT", "9090"))
+    except ValueError as exc:
+        logger.warning("Invalid RD_GUARD_METRICS_PORT value: %s", exc)
+        return
+
+    try:
         app.state.metrics_server = start_metrics_server(
             host=host, port=port, metrics=DEFAULT_METRICS
         )
-    except (OSError, ValueError, OverflowError) as exc:
+        app.state.metrics_display_host = _display_host(host)
+    except (OSError, OverflowError) as exc:
         logger.warning("Prometheus metrics server could not start: %s", exc)
 
 
@@ -61,10 +79,17 @@ def _start_metrics():
 async def _lifespan(_app):
     _start_metrics()
     yield
+    # Deliberately not stopped here: the metrics listener is cached and reused
+    # by host/port (see _rd_metrics_server.start_metrics_server) so it keeps
+    # serving scrapes across app restarts/reloads (e.g. `uvicorn --reload`)
+    # instead of dropping and rebinding the socket on every reload. Use
+    # `_rd_metrics_server.stop_metrics_server(host, port)` to explicitly
+    # release a listener when a process is shutting down for good.
 
 
 app = FastAPI(title="RD Guard V11.2.0 — Real World", lifespan=_lifespan)
 app.state.metrics_server = None
+app.state.metrics_display_host = None
 
 
 def _metrics_url():
@@ -72,11 +97,7 @@ def _metrics_url():
     if server is None:
         return "metrics unavailable" if _metrics_enabled() else "metrics disabled"
 
-    host = os.environ.get("RD_GUARD_METRICS_HOST", "0.0.0.0")
-    if host in {"0.0.0.0", "::", ""}:
-        host = "localhost"
-    elif ":" in host and not host.startswith("["):
-        host = f"[{host}]"
+    host = app.state.metrics_display_host
     return f"http://{host}:{server.server_port}/metrics"
 
 class Payload(BaseModel):

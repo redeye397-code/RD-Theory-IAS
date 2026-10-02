@@ -13,6 +13,8 @@ from urllib.request import urlopen
 
 import pytest
 
+from _rd_metrics_server import stop_metrics_server
+
 from rd_guard import RDGuard
 from rd_guard.v11.config import GuardConfig
 from rd_guard.v11.telemetry.logging import get_logger
@@ -156,8 +158,7 @@ def test_realworld_metrics_use_configured_host_and_port(monkeypatch):
     importlib.reload(realworld)
     with fastapi_testclient.TestClient(realworld.app):
         assert realworld.app.state.metrics_server is server
-    server.shutdown()
-    server.server_close()
+    stop_metrics_server("127.0.0.1", 0)
 
 
 def test_realworld_metrics_port_conflict_does_not_stop_app(monkeypatch):
@@ -178,6 +179,20 @@ def test_realworld_metrics_port_conflict_does_not_stop_app(monkeypatch):
             blocked = client.post("/check", json={"data": {"deleting_tests": True}})
             assert allowed.json()["blocked"] is False
             assert blocked.json()["blocked"] is True
+
+
+def test_realworld_invalid_metrics_port_does_not_stop_app(monkeypatch):
+    fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    realworld = importlib.import_module("realworld")
+    monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "true")
+    monkeypatch.setenv("RD_GUARD_METRICS_PORT", "not-a-port")
+    monkeypatch.setattr(realworld.DEFAULT_METRICS, "enabled", True)
+
+    with fastapi_testclient.TestClient(realworld.app) as client:
+        assert client.get("/").status_code == 200
+        assert client.get("/").json()["metrics"] == "metrics unavailable"
+        allowed = client.post("/check", json={"data": {"action": "read_file"}})
+        assert allowed.json()["blocked"] is False
 
 
 def test_readme_documents_cross_shell_install_and_startup_commands():

@@ -6,7 +6,7 @@ from urllib.request import urlopen
 import pytest
 
 from _rd_metrics import PrometheusMetrics
-from _rd_metrics_server import start_metrics_server
+from _rd_metrics_server import start_metrics_server, stop_metrics_server
 from _rd_state_machine import RecoveryError, SafetyStateMachine, seal_checkpoint
 from _rd_vault_core import GhostVaultProduction
 from rd_guard import RDGuard
@@ -46,8 +46,7 @@ def test_metrics_http_server_exposes_metrics_path():
         with pytest.raises(HTTPError):
             urlopen(f"http://127.0.0.1:{server.server_port}/")
     finally:
-        server.shutdown()
-        server.server_close()
+        stop_metrics_server("127.0.0.1", 0)
 
 
 def test_metrics_http_server_reuses_same_listener():
@@ -56,8 +55,28 @@ def test_metrics_http_server_reuses_same_listener():
     try:
         assert start_metrics_server("127.0.0.1", 0, metrics) is first_server
     finally:
-        first_server.shutdown()
-        first_server.server_close()
+        stop_metrics_server("127.0.0.1", 0)
+
+
+def test_metrics_http_server_closes_stale_listener_before_replacing():
+    import socket
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    metrics_a = PrometheusMetrics(prometheus_client=None)
+    metrics_b = PrometheusMetrics(prometheus_client=None)
+    first_server = start_metrics_server("127.0.0.1", port, metrics_a)
+    try:
+        # Requesting a different ``metrics`` object for the same address should
+        # replace (not leak) the existing listener, freeing the port so the
+        # new server can bind without raising "Address already in use".
+        second_server = start_metrics_server("127.0.0.1", port, metrics_b)
+        assert second_server is not first_server
+        assert first_server.fileno() == -1
+    finally:
+        stop_metrics_server("127.0.0.1", port)
 
 
 def test_metrics_http_server_exposes_prometheus_samples():
@@ -70,8 +89,7 @@ def test_metrics_http_server_exposes_prometheus_samples():
             assert response.status == 200
             assert b'rd_guard_action_decisions_total{decision="ALLOW"} 1.0' in response.read()
     finally:
-        server.shutdown()
-        server.server_close()
+        stop_metrics_server("127.0.0.1", 0)
 
 
 def test_default_prometheus_wrapper_uses_a_non_colliding_registry():
