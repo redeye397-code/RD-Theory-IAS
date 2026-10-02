@@ -1,6 +1,6 @@
-# RD Theory V11.2.0
+# RD Theory V11.2.1
 
-**Support policy:** V11.2.0 is the supported version. V1–V9 are archived
+**Support policy:** V11.2.1 is the supported version. V1–V9 are archived
 and available for reference only; their legacy import paths remain available
 with `DeprecationWarning` notices.
 
@@ -189,9 +189,9 @@ This estimates p95 `GuardedExecutor.execute()` latency over a rolling five
 minutes. Compare it with the validation and observation histograms to localize
 cost before making performance changes.
 
-## Run the V11.2.0 real-world app
+## Run the V11.2.1 real-world app
 
-`realworld.py` at the repository root is the V11.2.0 FastAPI entrypoint. It
+`realworld.py` at the repository root is the V11.2.1 FastAPI entrypoint. It
 imports from the `rd_guard` package layout below -- all of these files must be
 present (they are installed by `python -m pip install -e .`):
 
@@ -235,7 +235,7 @@ $port = if ($env:PORT) { $env:PORT } else { 8000 }
 uvicorn realworld:app --host 0.0.0.0 --port $port
 ```
 
-`GET /` reports `{"status": "V11.2.0 LIVE", ...}` once the server is running,
+`GET /` reports `{"status": "V11.2.1 LIVE", ...}` once the server is running,
 and `POST /check` with `{"data": {...}}` returns the guard's decision
 (`state`, `blocked`, `latency_ms`). If any of the files above are missing --
 for example after a partial file copy into a fresh Codespace -- `realworld.py`
@@ -247,7 +247,7 @@ policy.
 
 ## V11 roadmap
 
-V11.2.0 is the supported release, delivering **V11.2: onboarding and product
+V11.2.1 is the supported release, delivering **V11.2: onboarding and product
 clarity** along with safety and performance checks:
 
 - [x] Explain RD Guard's validated, fail-closed action enforcement up front.
@@ -256,6 +256,9 @@ clarity** along with safety and performance checks:
 - [x] Exercise malformed schema inputs and 10,000 schema evaluations.
 - [ ] Continue reviewing production deployment boundaries and measured
   latency before adding optimizations.
+
+See the [production deployment guide](docs/deployment.md) and
+[Docker quickstart](docs/docker-quickstart.md) for operational setup.
 
 ## Corrected rate limiting
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rd_theory"
-version = "11.2.0"
+version = "11.2.1"
 description = "RD Theory - Self-Limiting AI Safety Architecture"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -42,4 +42,3 @@ py-modules = [
 
 [tool.setuptools.packages.find]
 include = ["rd_guard", "rd_guard.*"]
-

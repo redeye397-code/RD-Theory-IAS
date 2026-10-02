@@ -1,0 +1,79 @@
+services:
+  app:
+    build: .
+    environment:
+      PORT: "8000"
+      RD_GUARD_METRICS_ENABLED: "true"
+      RD_GUARD_METRICS_HOST: "0.0.0.0"
+      RD_GUARD_METRICS_PORT: "9090"
+    ports:
+      - "8000:8000"
+    expose:
+      - "9090"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; response=urllib.request.urlopen('http://127.0.0.1:8000/'); assert json.load(response)['status']=='V11.2.1 LIVE'"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    networks:
+      - rd-guard
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./examples/prometheus/prometheus-compose.yml:/etc/prometheus/prometheus.yml:ro
+      - ./examples/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - rd-guard
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./examples/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./examples/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./examples/grafana/rd_guard_dashboard.json:/var/lib/grafana/dashboards/rd_guard_dashboard.json:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - rd-guard
+
+networks:
+  rd-guard:
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:
