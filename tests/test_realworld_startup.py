@@ -1,4 +1,4 @@
-"""Tests for the V11.2.1 real-world startup path (``realworld.py``).
+"""Tests for the V11.2.2 real-world startup path (``realworld.py``).
 
 These guard against the package-layout regression where ``rd_guard`` was a
 flat module and the V11 submodules it documents/imports --
@@ -61,7 +61,7 @@ def test_realworld_entrypoint_imports_and_serves_requests(monkeypatch):
 
     root = client.get("/")
     assert root.status_code == 200
-    assert root.json()["status"] == "V11.2.1 LIVE"
+    assert root.json()["status"] == "V11.2.2 LIVE"
 
     allowed = client.post("/check", json={"data": {"action": "read_file"}})
     assert allowed.status_code == 200
@@ -162,7 +162,7 @@ def test_realworld_metrics_use_configured_host_and_port(monkeypatch):
     stop_metrics_server("127.0.0.1", 0)
 
 
-def test_realworld_metrics_port_conflict_does_not_stop_app(monkeypatch):
+def test_realworld_metrics_port_conflict_does_not_stop_app(monkeypatch, caplog):
     fastapi_testclient = pytest.importorskip("fastapi.testclient")
     realworld = importlib.import_module("realworld")
     monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "true")
@@ -180,9 +180,11 @@ def test_realworld_metrics_port_conflict_does_not_stop_app(monkeypatch):
             blocked = client.post("/check", json={"data": {"deleting_tests": True}})
             assert allowed.json()["blocked"] is False
             assert blocked.json()["blocked"] is True
+        assert "Check RD_GUARD_METRICS_HOST" in caplog.text
+        assert "application startup will continue" in caplog.text
 
 
-def test_realworld_invalid_metrics_port_does_not_stop_app(monkeypatch):
+def test_realworld_invalid_metrics_port_does_not_stop_app(monkeypatch, caplog):
     fastapi_testclient = pytest.importorskip("fastapi.testclient")
     realworld = importlib.import_module("realworld")
     monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "true")
@@ -194,6 +196,8 @@ def test_realworld_invalid_metrics_port_does_not_stop_app(monkeypatch):
         assert client.get("/").json()["metrics"] == "metrics unavailable"
         allowed = client.post("/check", json={"data": {"action": "read_file"}})
         assert allowed.json()["blocked"] is False
+    assert "RD_GUARD_METRICS_PORT must be an integer" in caplog.text
+    assert "application startup will continue" in caplog.text
 
 
 def test_readme_documents_cross_shell_install_and_startup_commands():

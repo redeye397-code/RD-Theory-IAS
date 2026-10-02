@@ -1,6 +1,6 @@
-# RD Theory V11.2.1
+# RD Theory V11.2.2
 
-**Support policy:** V11.2.1 is the supported version. V1–V9 are archived
+**Support policy:** V11.2.2 is the supported version. V1–V9 are archived
 and available for reference only; their legacy import paths remain available
 with `DeprecationWarning` notices.
 
@@ -93,7 +93,10 @@ metrics_server = start_metrics_server()  # default: :9090/metrics
 Set `RD_GUARD_METRICS_HOST` and `RD_GUARD_METRICS_PORT` to configure the
 listener, or pass `host` and `port` to `start_metrics_server()`. The real-world
 app starts the exporter during FastAPI startup, defaults to port `9090`, and
-logs a warning rather than failing app startup if the listener cannot bind.
+logs an operator-actionable warning rather than failing app startup if the
+metrics configuration is invalid or the listener cannot bind. The app remains
+available, but `/` reports `metrics unavailable`; production readiness checks
+must verify metrics availability separately whenever monitoring is required.
 Set `RD_GUARD_METRICS_ENABLED=false` to disable it. Metrics are also disabled
 automatically when `prometheus-client` is unavailable. Scrape `/metrics` with
 Prometheus. The example Grafana dashboard is
@@ -189,9 +192,9 @@ This estimates p95 `GuardedExecutor.execute()` latency over a rolling five
 minutes. Compare it with the validation and observation histograms to localize
 cost before making performance changes.
 
-## Run the V11.2.1 real-world app
+## Run the V11.2.2 real-world app
 
-`realworld.py` at the repository root is the V11.2.1 FastAPI entrypoint. It
+`realworld.py` at the repository root is the V11.2.2 FastAPI entrypoint. It
 imports from the `rd_guard` package layout below -- all of these files must be
 present (they are installed by `python -m pip install -e .`):
 
@@ -235,27 +238,36 @@ $port = if ($env:PORT) { $env:PORT } else { 8000 }
 uvicorn realworld:app --host 0.0.0.0 --port $port
 ```
 
-`GET /` reports `{"status": "V11.2.1 LIVE", ...}` once the server is running,
+`GET /` reports `{"status": "V11.2.2 LIVE", ...}` once the server is running,
 and `POST /check` with `{"data": {...}}` returns the guard's decision
 (`state`, `blocked`, `latency_ms`). If any of the files above are missing --
 for example after a partial file copy into a fresh Codespace -- `realworld.py`
 raises an `ImportError` at startup naming the missing module and the fix
 (reinstall the package and confirm the `rd_guard/v11/` files exist), instead
-of exiting silently. The metrics exporter is a separate listener, and its
-configured host/port may still need to be allowed by the deployment's network
-policy.
+of exiting silently. Missing application dependencies or package files are
+startup-fatal and include install guidance. Metrics listener/configuration
+failures instead produce a warning and keep the API running with metrics
+unavailable; check the startup logs and `/` response before declaring a
+production deployment ready. The metrics exporter is a separate listener:
+allow access only from trusted monitoring systems and keep it off public
+ingress.
 
-## V11 roadmap
+## V11.2.2 deployment hardening
 
-V11.2.1 is the supported release, delivering **V11.2: onboarding and product
-clarity** along with safety and performance checks:
+V11.2.2 is the supported hardening release on the V11 line. It preserves the
+stable V11 API and fail-closed enforcement model while focusing on production
+deployment boundaries, observability, startup diagnostics, and operator
+readiness:
 
-- [x] Explain RD Guard's validated, fail-closed action enforcement up front.
-- [x] Provide a local-install command and a runnable allow/block example.
-- [x] Rate-limit optional webhook alerts and test failed/malformed requests.
-- [x] Exercise malformed schema inputs and 10,000 schema evaluations.
-- [ ] Continue reviewing production deployment boundaries and measured
-  latency before adding optimizations.
+- Review API and metrics network boundaries; restrict metrics to trusted
+  monitoring systems.
+- Use durable, append-only audit storage and verify that high-risk work fails
+  closed when audit writes fail.
+- Require named, independently authorized recovery operators and rehearse
+  checkpoint verification and recovery.
+- Verify startup logs, health checks, metrics scraping, alert routing, backup
+  restoration, and rollback procedures before enabling production traffic.
+- Measure latency under representative load before making optimizations.
 
 See the [production deployment guide](docs/deployment.md) and
 [Docker quickstart](docs/docker-quickstart.md) for operational setup.

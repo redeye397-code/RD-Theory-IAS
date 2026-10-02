@@ -18,6 +18,13 @@ production-certified security boundary. Production deployments still require
 appropriate process isolation, access control, durable audit storage, and
 independent review.
 
+The real-world FastAPI example binds its API and optional metrics exporter on
+separate listeners. Operators must define network policy for each boundary;
+the metrics endpoint is intended for trusted monitoring systems, not public
+clients. Its `GET /` response is an application liveness signal only and does
+not attest to audit-sink, metrics-scrape, or recovery readiness. High-risk
+actions still fail closed when required audit checks fail.
+
 ## Optional integrations and observability
 
 `WebhookAlerter` sends caller-selected JSON notifications over HTTP(S). It is
