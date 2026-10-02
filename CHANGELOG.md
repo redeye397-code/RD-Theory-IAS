@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Deferred the real-world app's Prometheus listener until FastAPI startup,
+  made it configurable/disableable, reused an in-process listener, and kept
+  port/configuration failures from taking down the app. Added startup,
+  metrics, diagnostics, and shell-command coverage and documented Bash and
+  PowerShell launch commands.
+- Fixed a stale-listener leak: replacing a cached metrics server for an
+  address now shuts down and closes the old listener before starting the
+  new one, and the real-world app's displayed metrics host is resolved once
+  at startup instead of being re-read from the environment per request.
 - Fixed a V11.2.0 startup regression: `realworld.py` imported
   `rd_guard.v11.config` and `rd_guard.v11.telemetry.logging`, but `rd_guard`
   was a flat module with no `v11` submodules, so the app failed on import.

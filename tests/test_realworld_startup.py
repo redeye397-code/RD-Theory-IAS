@@ -7,8 +7,13 @@ exist, causing ``realworld.py`` to fail immediately on import.
 """
 
 import importlib
+import socket
+from pathlib import Path
+from urllib.request import urlopen
 
 import pytest
+
+from _rd_metrics_server import stop_metrics_server
 
 from rd_guard import RDGuard
 from rd_guard.v11.config import GuardConfig
@@ -45,11 +50,13 @@ def test_rdguard_accepts_v11_config_and_evaluate_alias():
     assert blocked.blocked is True
 
 
-def test_realworld_entrypoint_imports_and_serves_requests():
+def test_realworld_entrypoint_imports_and_serves_requests(monkeypatch):
     fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "false")
 
     realworld = importlib.import_module("realworld")
 
+    realworld.app.state.metrics_server = None
     client = fastapi_testclient.TestClient(realworld.app)
 
     root = client.get("/")
@@ -78,8 +85,125 @@ def test_realworld_reports_actionable_error_when_v11_layout_missing(monkeypatch)
         importlib.import_module("realworld")
 
     message = str(exc_info.value)
+    assert "python -m pip install -r requirements.txt" in message
     assert "pip install -e ." in message
     assert "rd_guard/v11/config.py" in message
 
     # Clean up so later tests re-import a fresh, working realworld module.
     monkeypatch.delitem(sys.modules, "realworld", raising=False)
+
+
+def test_realworld_reports_actionable_error_when_fastapi_is_missing(monkeypatch):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "fastapi", None)
+    monkeypatch.delitem(sys.modules, "realworld", raising=False)
+
+    with pytest.raises(ImportError, match="python -m pip install -r requirements.txt"):
+        importlib.import_module("realworld")
+
+    monkeypatch.delitem(sys.modules, "realworld", raising=False)
+
+
+def test_realworld_metrics_can_be_disabled(monkeypatch):
+    fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    realworld = importlib.import_module("realworld")
+    monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "false")
+    monkeypatch.setattr(realworld.DEFAULT_METRICS, "enabled", True)
+    monkeypatch.setattr(
+        realworld,
+        "start_metrics_server",
+        lambda **kwargs: pytest.fail("metrics server should not start"),
+    )
+
+    with fastapi_testclient.TestClient(realworld.app) as client:
+        assert client.get("/").json()["metrics"] == "metrics disabled"
+        assert client.post("/check", json={"data": {"action": "read_file"}}).json()[
+            "blocked"
+        ] is False
+
+
+def test_realworld_skips_metrics_when_optional_client_is_unavailable(monkeypatch):
+    fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    realworld = importlib.import_module("realworld")
+    monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "true")
+    monkeypatch.setattr(realworld.DEFAULT_METRICS, "enabled", False)
+    monkeypatch.setattr(
+        realworld,
+        "start_metrics_server",
+        lambda **kwargs: pytest.fail("metrics server should not start"),
+    )
+
+    with fastapi_testclient.TestClient(realworld.app) as client:
+        assert client.get("/").json()["metrics"] == "metrics disabled"
+
+
+def test_realworld_metrics_use_configured_host_and_port(monkeypatch):
+    fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    realworld = importlib.import_module("realworld")
+    monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "true")
+    monkeypatch.setenv("RD_GUARD_METRICS_HOST", "127.0.0.1")
+    monkeypatch.setenv("RD_GUARD_METRICS_PORT", "0")
+    monkeypatch.setattr(realworld.DEFAULT_METRICS, "enabled", True)
+
+    with fastapi_testclient.TestClient(realworld.app) as client:
+        metrics_url = client.get("/").json()["metrics"]
+        assert metrics_url.startswith("http://127.0.0.1:")
+        with urlopen(metrics_url) as response:
+            assert response.status == 200
+            assert response.read() is not None
+        assert realworld.app.state.metrics_server.server_port > 0
+
+    server = realworld.app.state.metrics_server
+    importlib.reload(realworld)
+    with fastapi_testclient.TestClient(realworld.app):
+        assert realworld.app.state.metrics_server is server
+    stop_metrics_server("127.0.0.1", 0)
+
+
+def test_realworld_metrics_port_conflict_does_not_stop_app(monkeypatch):
+    fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    realworld = importlib.import_module("realworld")
+    monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "true")
+    monkeypatch.setenv("RD_GUARD_METRICS_HOST", "127.0.0.1")
+    monkeypatch.setattr(realworld.DEFAULT_METRICS, "enabled", True)
+
+    with socket.socket() as occupied:
+        occupied.bind(("127.0.0.1", 0))
+        monkeypatch.setenv("RD_GUARD_METRICS_PORT", str(occupied.getsockname()[1]))
+
+        with fastapi_testclient.TestClient(realworld.app) as client:
+            assert client.get("/").status_code == 200
+            assert client.get("/").json()["metrics"] == "metrics unavailable"
+            allowed = client.post("/check", json={"data": {"action": "read_file"}})
+            blocked = client.post("/check", json={"data": {"deleting_tests": True}})
+            assert allowed.json()["blocked"] is False
+            assert blocked.json()["blocked"] is True
+
+
+def test_realworld_invalid_metrics_port_does_not_stop_app(monkeypatch):
+    fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    realworld = importlib.import_module("realworld")
+    monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "true")
+    monkeypatch.setenv("RD_GUARD_METRICS_PORT", "not-a-port")
+    monkeypatch.setattr(realworld.DEFAULT_METRICS, "enabled", True)
+
+    with fastapi_testclient.TestClient(realworld.app) as client:
+        assert client.get("/").status_code == 200
+        assert client.get("/").json()["metrics"] == "metrics unavailable"
+        allowed = client.post("/check", json={"data": {"action": "read_file"}})
+        assert allowed.json()["blocked"] is False
+
+
+def test_readme_documents_cross_shell_install_and_startup_commands():
+    repo_root = Path(__file__).parents[1]
+    readme = (repo_root / "README.md").read_text()
+    procfile = (repo_root / "Procfile").read_text()
+
+    assert "python -m pip install -r requirements.txt" in readme
+    assert "python -m pip install -e ." in readme
+    assert "uvicorn realworld:app --reload" in readme
+    assert "uvicorn realworld:app --host 0.0.0.0 --port ${PORT:-8000}" in readme
+    assert "$port = if ($env:PORT) { $env:PORT } else { 8000 }" in readme
+    assert "uvicorn realworld:app --host 0.0.0.0 --port $port" in readme
+    assert "${PORT:-8000}" in procfile

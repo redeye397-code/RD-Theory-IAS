@@ -2,9 +2,12 @@
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
-from threading import Thread
+from threading import Lock, Thread
 
 from _rd_metrics import DEFAULT_METRICS
+
+_servers = {}
+_servers_lock = Lock()
 
 
 class _MetricsHandler(BaseHTTPRequestHandler):
@@ -30,11 +33,53 @@ def start_metrics_server(host=None, port=None, metrics=None):
     port = port if port is not None else int(
         os.environ.get("RD_GUARD_METRICS_PORT", "9090")
     )
-    server = ThreadingHTTPServer((host, port), _MetricsHandler)
-    server.daemon_threads = True
-    server.metrics = metrics if metrics is not None else DEFAULT_METRICS
-    Thread(target=server.serve_forever, daemon=True).start()
-    return server
+    metrics = metrics if metrics is not None else DEFAULT_METRICS
+    address = (host, port)
+
+    with _servers_lock:
+        existing = _servers.get(address)
+        if existing is not None:
+            if (
+                existing.fileno() >= 0
+                and existing.serve_thread.is_alive()
+                and existing.metrics is metrics
+            ):
+                return existing
+            _servers.pop(address, None)
+            if existing.fileno() >= 0:
+                existing.shutdown()
+                existing.server_close()
+
+        server = ThreadingHTTPServer(address, _MetricsHandler)
+        server.daemon_threads = True
+        server.metrics = metrics
+        thread = Thread(target=server.serve_forever, daemon=True)
+        server.serve_thread = thread
+        _servers[address] = server
+        thread.start()
+        return server
 
 
-__all__ = ["start_metrics_server"]
+def stop_metrics_server(host, port):
+    """Shut down and deregister the cached listener for ``(host, port)``.
+
+    ``port`` must match the value originally passed to ``start_metrics_server``
+    (the requested port), not the OS-assigned ``server.server_port`` that
+    results from requesting an ephemeral port with ``port=0``: the cache is
+    keyed by the requested address, so a listener started with ``port=0`` must
+    also be stopped with ``port=0``.
+
+    Callers that manage a server's lifecycle directly (for example tests that
+    call ``server.shutdown()``/``server.server_close()`` themselves) should use
+    this instead so the module-level cache does not retain a stale, closed
+    entry indefinitely.
+    """
+    address = (host, port)
+    with _servers_lock:
+        existing = _servers.pop(address, None)
+        if existing is not None and existing.fileno() >= 0:
+            existing.shutdown()
+            existing.server_close()
+
+
+__all__ = ["start_metrics_server", "stop_metrics_server"]

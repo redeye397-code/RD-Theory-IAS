@@ -91,8 +91,12 @@ metrics_server = start_metrics_server()  # default: :9090/metrics
 ```
 
 Set `RD_GUARD_METRICS_HOST` and `RD_GUARD_METRICS_PORT` to configure the
-listener, or pass `host` and `port` to `start_metrics_server()`. Scrape
-`/metrics` with Prometheus. The example Grafana dashboard is
+listener, or pass `host` and `port` to `start_metrics_server()`. The real-world
+app starts the exporter during FastAPI startup, defaults to port `9090`, and
+logs a warning rather than failing app startup if the listener cannot bind.
+Set `RD_GUARD_METRICS_ENABLED=false` to disable it. Metrics are also disabled
+automatically when `prometheus-client` is unavailable. Scrape `/metrics` with
+Prometheus. The example Grafana dashboard is
 `examples/grafana/rd_guard_dashboard.json`.
 
 ## State machine
@@ -205,13 +209,13 @@ rd_guard/
 Runtime dependencies (`fastapi`, `uvicorn`, `pydantic`, `httpx`,
 `prometheus_client`) are declared in `requirements.txt`. `httpx` is required
 by Starlette's `TestClient` (used in `tests/test_realworld_startup.py`), and
-`prometheus_client` is optional at runtime -- if it is not installed, the `:9090`
-metrics server is simply skipped instead of crashing the app.
+`prometheus_client` is optional at runtime. If it is not installed, the metrics
+exporter is skipped without affecting app startup.
 
 Install dependencies and start the app from the repository root:
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 python -m pip install -e .
 uvicorn realworld:app --reload
 ```
@@ -223,13 +227,23 @@ environment variable, as most hosting providers expect):
 uvicorn realworld:app --host 0.0.0.0 --port ${PORT:-8000}
 ```
 
+The production command above uses Bash/POSIX variable syntax. In PowerShell,
+use:
+
+```powershell
+$port = if ($env:PORT) { $env:PORT } else { 8000 }
+uvicorn realworld:app --host 0.0.0.0 --port $port
+```
+
 `GET /` reports `{"status": "V11.2.0 LIVE", ...}` once the server is running,
 and `POST /check` with `{"data": {...}}` returns the guard's decision
 (`state`, `blocked`, `latency_ms`). If any of the files above are missing --
 for example after a partial file copy into a fresh Codespace -- `realworld.py`
 raises an `ImportError` at startup naming the missing module and the fix
 (reinstall the package and confirm the `rd_guard/v11/` files exist), instead
-of exiting silently.
+of exiting silently. The metrics exporter is a separate listener, and its
+configured host/port may still need to be allowed by the deployment's network
+policy.
 
 ## V11 roadmap
 
