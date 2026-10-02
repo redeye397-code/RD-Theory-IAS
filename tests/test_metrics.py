@@ -46,8 +46,7 @@ def test_metrics_http_server_exposes_metrics_path():
         with pytest.raises(HTTPError):
             urlopen(f"http://127.0.0.1:{server.server_port}/")
     finally:
-        server.shutdown()
-        server.server_close()
+        stop_metrics_server("127.0.0.1", 0)
 
 
 def test_metrics_http_server_reuses_same_listener():
@@ -56,8 +55,7 @@ def test_metrics_http_server_reuses_same_listener():
     try:
         assert start_metrics_server("127.0.0.1", 0, metrics) is first_server
     finally:
-        first_server.shutdown()
-        first_server.server_close()
+        stop_metrics_server("127.0.0.1", 0)
 
 
 def test_metrics_http_server_closes_stale_listener_before_replacing():
@@ -91,8 +89,7 @@ def test_metrics_http_server_exposes_prometheus_samples():
             assert response.status == 200
             assert b'rd_guard_action_decisions_total{decision="ALLOW"} 1.0' in response.read()
     finally:
-        server.shutdown()
-        server.server_close()
+        stop_metrics_server("127.0.0.1", 0)
 
 
 def test_default_prometheus_wrapper_uses_a_non_colliding_registry():
