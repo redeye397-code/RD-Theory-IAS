@@ -1,4 +1,4 @@
-"""V11.2.0 FastAPI entrypoint for the real-world startup example."""
+"""V11.2.1 FastAPI entrypoint for the real-world startup example."""
 
 import os
 import time
@@ -21,12 +21,12 @@ try:
 except ImportError as exc:
     missing = getattr(exc, "name", None) or ""
     raise ImportError(
-        f"realworld.py (V11.2.0) could not import '{missing or 'rd_guard'}' "
+        f"realworld.py (V11.2.1) could not import '{missing or 'rd_guard'}' "
         f"({exc}). Install dependencies with "
         "`python -m pip install -r requirements.txt`, then run "
         "`python -m pip install -e .` from the repository root. Confirm these "
         "files exist: rd_guard/__init__.py, rd_guard/v11/config.py, "
-        "rd_guard/v11/telemetry/logging.py. See README.md 'Run the V11.2.0 "
+        "rd_guard/v11/telemetry/logging.py. See README.md 'Run the V11.2.1 "
         "real-world app' for the expected layout and startup command."
     ) from exc
 
@@ -87,7 +87,7 @@ async def _lifespan(_app):
     # release a listener when a process is shutting down for good.
 
 
-app = FastAPI(title="RD Guard V11.2.0 — Real World", lifespan=_lifespan)
+app = FastAPI(title="RD Guard V11.2.1 — Real World", lifespan=_lifespan)
 app.state.metrics_server = None
 app.state.metrics_display_host = None
 
@@ -122,6 +122,6 @@ def check(payload: Payload):
 
 @app.get("/")
 def root():
-    return {"status": "V11.2.0 LIVE", "metrics": _metrics_url()}
+    return {"status": "V11.2.1 LIVE", "metrics": _metrics_url()}
 
 # Run: uvicorn realworld:app --reload
