@@ -56,25 +56,29 @@ def verify_recovery_token(token, now=None, key=None):
     if not isinstance(token, str) or len(token) > 4096 or token.count(".") != 1:
         raise RecoveryTokenError("INVALID_APPROVAL_TOKEN")
     encoded, supplied_signature = token.split(".", 1)
+    
+    # Compute expected signature from the encoded payload
     try:
-        encoded.encode("ascii")
-        supplied_signature.encode("ascii")
-    except UnicodeEncodeError:
-        raise RecoveryTokenError("INVALID_APPROVAL_TOKEN") from None
-    expected_signature = _encode(
-        hmac.new(_signing_key(key), encoded.encode("ascii"), hashlib.sha256).digest()
-    )
-    # Compare the canonical encoded strings: base64 decoding is lenient about the
-    # unused trailing bits of the final character, so comparing decoded bytes
-    # would accept a tampered (non-canonical) signature.
-    if not hmac.compare_digest(
-        supplied_signature.encode("ascii"), expected_signature.encode("ascii")
-    ):
+        expected_signature = _encode(
+            hmac.new(_signing_key(key), encoded.encode("ascii"), hashlib.sha256).digest()
+        )
+    except (RecoveryTokenError, UnicodeEncodeError):
+        raise RecoveryTokenError("INVALID_APPROVAL_SIGNATURE") from None
+    
+    # Compare the canonical base64url-encoded signature strings in constant time.
+    # This is critical: base64url encoding of a 32-byte HMAC produces 43 chars,
+    # where the last char carries only 4 significant bits. If we compared the
+    # decoded bytes instead of the canonical strings, an attacker could flip
+    # the unused bits in the final character and pass verification.
+    if not hmac.compare_digest(supplied_signature, expected_signature):
         raise RecoveryTokenError("INVALID_APPROVAL_SIGNATURE")
+    
+    # Now decode and validate the payload
     try:
         payload = json.loads(_decode(encoded))
     except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
         raise RecoveryTokenError("INVALID_APPROVAL_TOKEN") from None
+    
     if not isinstance(payload, dict):
         raise RecoveryTokenError("INVALID_APPROVAL_TOKEN")
     required = ("operator", "jti", "iat", "exp", "purpose")
