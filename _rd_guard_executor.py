@@ -17,20 +17,9 @@ from rd_guard.v11.policy import DESTRUCTIVE_ACTIONS
 from _rd_metrics import DEFAULT_METRICS
 
 
-#: Retained as a compatibility export; policy decisions use the closed-world
-#: action list in ``rd_guard.v11.policy``.
-HIGH_RISK_KEYWORDS = (
-    "delete",
-    "remove",
-    "rm",
-    "unlink",
-    "erase",
-    "drop",
-    "push",
-    "bypass_alignment",
-    "skip_alignment",
-    "ignore_alignment",
-)
+#: Deprecated compatibility alias; the policy source of truth is
+#: ``rd_guard.v11.policy``.
+HIGH_RISK_KEYWORDS = DESTRUCTIVE_ACTIONS
 
 
 class GuardedExecutor:
@@ -141,7 +130,7 @@ class GuardedExecutor:
                     blocked=True,
                     audit_record=result["audit_record"],
                 )
-            policy = evaluate_action_policy(agent_state)
+            policy = evaluate_action_policy(action)
             if policy.mutating or action.risk_level == "high":
                 try:
                     self._ensure_audit_available()
