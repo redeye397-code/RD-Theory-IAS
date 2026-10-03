@@ -1,9 +1,11 @@
 import json
+import sys
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
 import pytest
+import prometheus_client
 
 from _rd_metrics import PrometheusMetrics
 from _rd_metrics_server import start_metrics_server, stop_metrics_server
@@ -27,13 +29,9 @@ def test_metrics_noop_fallback_is_safe():
     assert metrics.render() == b""
 
 
-def test_default_metrics_falls_back_when_prometheus_client_is_missing():
-    try:
-        __import__("prometheus_client")
-    except ImportError:
-        assert PrometheusMetrics().enabled is False
-    else:
-        pytest.skip("prometheus-client is installed")
+def test_default_metrics_falls_back_when_prometheus_client_is_missing(monkeypatch):
+    monkeypatch.setitem(sys.modules, "prometheus_client", None)
+    assert PrometheusMetrics().enabled is False
 
 
 def test_metrics_http_server_exposes_metrics_path():
@@ -80,7 +78,6 @@ def test_metrics_http_server_closes_stale_listener_before_replacing():
 
 
 def test_metrics_http_server_exposes_prometheus_samples():
-    prometheus_client = pytest.importorskip("prometheus_client")
     metrics = PrometheusMetrics(registry=prometheus_client.CollectorRegistry())
     metrics.record_decision("ALLOW")
     server = start_metrics_server("127.0.0.1", 0, metrics)
@@ -93,7 +90,6 @@ def test_metrics_http_server_exposes_prometheus_samples():
 
 
 def test_default_prometheus_wrapper_uses_a_non_colliding_registry():
-    pytest.importorskip("prometheus_client")
     first = PrometheusMetrics()
     second = PrometheusMetrics()
     first.record_decision("ALLOW")
@@ -120,20 +116,20 @@ def test_grafana_dashboard_is_valid_json():
 
 
 def test_prometheus_metrics_record_guard_state_executor_and_vault(tmp_path):
-    prometheus_client = pytest.importorskip("prometheus_client")
     registry = prometheus_client.CollectorRegistry()
     metrics = PrometheusMetrics(registry=registry)
     guard = RDGuard(metrics=metrics)
 
     states = (
-        {},
+        {"action": "noop"},
         {"action": "delete_tests"},
         {
+            "action": "noop",
             "original_goal": "build safe software",
             "current_goal": "write unrelated poetry",
         },
-        {"context_size": 100, "context_limit": 100},
-        {"action_history": ["retry"] * 5, "stall_window": 5},
+        {"action": "noop", "context_size": 100, "context_limit": 100},
+        {"action": "noop", "action_history": ["retry"] * 5, "stall_window": 5},
     )
     for state in states:
         guard.observe(state)
@@ -144,10 +140,18 @@ def test_prometheus_metrics_record_guard_state_executor_and_vault(tmp_path):
     machine.floor_block()
     machine.retry_allowed()
     machine.enter_fault()
-    machine.request_recovery(seal_checkpoint({"goal": "safe"}), "approval", now=1)
+    from rd_guard.v11.recovery import issue_recovery_token
+
+    machine.request_recovery(
+        seal_checkpoint({"goal": "safe"}),
+        issue_recovery_token("test-operator", now=1),
+        now=1,
+    )
     machine.enter_fault()
     with pytest.raises(RecoveryError, match="CHECKPOINT_MISSING"):
-        machine.request_recovery(None, "approval-2", now=2)
+        machine.request_recovery(
+            None, issue_recovery_token("test-operator", now=2), now=2
+        )
 
     executor = GuardedExecutor(metrics=metrics)
     executor.execute({"action": "read_file"}, run=lambda action: None)

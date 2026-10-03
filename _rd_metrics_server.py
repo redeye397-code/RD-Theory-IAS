@@ -3,10 +3,16 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
 from threading import Lock, Thread
+from typing import Any, cast
 
 from _rd_metrics import DEFAULT_METRICS
 
-_servers = {}
+class MetricsHTTPServer(ThreadingHTTPServer):
+    metrics: Any
+    serve_thread: Thread
+
+
+_servers: dict[tuple[str, int], MetricsHTTPServer] = {}
 _servers_lock = Lock()
 
 
@@ -16,7 +22,8 @@ class _MetricsHandler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
 
-        body = self.server.metrics.render()
+        server = cast(MetricsHTTPServer, self.server)
+        body = server.metrics.render()
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -29,7 +36,7 @@ class _MetricsHandler(BaseHTTPRequestHandler):
 
 def start_metrics_server(host=None, port=None, metrics=None):
     """Start a daemon-threaded ``/metrics`` server and return its server object."""
-    host = host or os.environ.get("RD_GUARD_METRICS_HOST", "0.0.0.0")
+    host = host or os.environ.get("RD_GUARD_METRICS_HOST", "127.0.0.1")
     port = port if port is not None else int(
         os.environ.get("RD_GUARD_METRICS_PORT", "9090")
     )
@@ -50,7 +57,7 @@ def start_metrics_server(host=None, port=None, metrics=None):
                 existing.shutdown()
                 existing.server_close()
 
-        server = ThreadingHTTPServer(address, _MetricsHandler)
+        server = MetricsHTTPServer(address, _MetricsHandler)
         server.daemon_threads = True
         server.metrics = metrics
         thread = Thread(target=server.serve_forever, daemon=True)

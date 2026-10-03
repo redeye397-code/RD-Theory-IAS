@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 
-AUDIT_LOG = []
+AUDIT_LOG: list[dict] = []
 
 
 class AuditWriteError(RuntimeError):

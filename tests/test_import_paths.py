@@ -18,11 +18,17 @@ def test_canonical_rd_executor_import():
     assert GuardedExecutor.__module__ == "_rd_guard_executor"
 
 
-def test_v9_compatibility_import_warns_and_works():
-    import rd_guard_v9
+def test_v11_state_machine_import_is_the_authoritative_root_class():
+    from _rd_state_machine import SafetyStateMachine as RootStateMachine
+    from rd_guard.v11._rd_state_machine import SafetyStateMachine as V11StateMachine
 
+    assert RootStateMachine is V11StateMachine
+
+
+def test_v9_compatibility_import_warns_and_works():
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
+        import rd_guard_v9
         importlib.reload(rd_guard_v9)
 
     assert rd_guard_v9.RDGuard is RDGuard
@@ -30,10 +36,9 @@ def test_v9_compatibility_import_warns_and_works():
 
 
 def test_v8_reference_import_warns_and_works():
-    import rd_theory_v8
-
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
+        import rd_theory_v8
         importlib.reload(rd_theory_v8)
 
     assert rd_theory_v8.GhostVaultV8_Production is GhostVaultProduction
@@ -41,11 +46,10 @@ def test_v8_reference_import_warns_and_works():
 
 
 def test_v9_helper_imports_warn_and_work():
-    import actions_v9
-    import risk_engine_v9
-
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
+        import actions_v9
+        import risk_engine_v9
         importlib.reload(actions_v9)
         importlib.reload(risk_engine_v9)
 
@@ -64,9 +68,9 @@ def test_v1_through_v7_compatibility_imports_warn():
         "rd_theory_v6",
         "rd_theory_v7",
     ):
-        module = importlib.import_module(module_name)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
+            module = importlib.import_module(module_name)
             importlib.reload(module)
 
         assert any(

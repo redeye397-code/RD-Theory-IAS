@@ -1,4 +1,4 @@
-"""GuardedExecutor: the V10.0 enforcement boundary for agent actions.
+"""GuardedExecutor: the V11.2.3 enforcement boundary for agent actions.
 
 Every action MUST be validated against the canonical schema
 (``CanonicalAction``) and observed by ``RDGuard`` through ``execute()``
@@ -8,20 +8,17 @@ closed and blocks the action instead of executing it, and the safety state
 machine transitions to ``FAULT``.
 """
 
-import re
-
-from _rd_guard_actions import AuditSink, AuditWriteError
+from _rd_guard_actions import AuditSink, AuditWriteError, floor_block
 from _rd_guard_schema import CanonicalAction, SchemaError
-from _rd_state_machine import SafetyStateMachine
+from _rd_state_machine import COMPROMISED, FAULT, RECOVERING, SafetyStateMachine
 from rd_guard import GuardAction, RDGuard
+from rd_guard.v11.guard import evaluate_action_policy
+from rd_guard.v11.policy import DESTRUCTIVE_ACTIONS
 from _rd_metrics import DEFAULT_METRICS
 
 
-#: Keyword fragments that mark an action as high-risk regardless of the
-#: guard's own risk scoring. Mirrors the hard constraints in ``IASFloor``.
-#: Matched on ``_``-delimited token boundaries (see ``_is_high_risk``) so
-#: e.g. ``"rm"`` does not also match ``"confirm_receipt"`` and ``"drop"``
-#: does not also match ``"dropdown"``.
+#: Retained as a compatibility export; policy decisions use the closed-world
+#: action list in ``rd_guard.v11.policy``.
 HIGH_RISK_KEYWORDS = (
     "delete",
     "remove",
@@ -33,10 +30,6 @@ HIGH_RISK_KEYWORDS = (
     "bypass_alignment",
     "skip_alignment",
     "ignore_alignment",
-)
-
-_HIGH_RISK_PATTERNS = tuple(
-    re.compile(rf"(?:^|_){re.escape(keyword)}(?:_|$)") for keyword in HIGH_RISK_KEYWORDS
 )
 
 
@@ -78,8 +71,9 @@ class GuardedExecutor:
     def _is_high_risk(self, action: CanonicalAction) -> bool:
         if action.risk_level == "high":
             return True
-        text = action.as_text()
-        return any(pattern.search(text) for pattern in _HIGH_RISK_PATTERNS)
+        decision = evaluate_action_policy(action)
+        tokens = set(action.as_text().split("_"))
+        return decision.mutating or bool(tokens.intersection(DESTRUCTIVE_ACTIONS))
 
     def _ensure_audit_available(self):
         ensure_available = getattr(self.audit_log, "ensure_available", None)
@@ -92,7 +86,7 @@ class GuardedExecutor:
         return GuardAction(
             decision="BLOCK",
             action=action.type,
-            reason="Audit logging unavailable; high-risk action blocked (fail-closed)",
+            reason="Audit logging unavailable; action blocked (fail-closed)",
             blocked=True,
             audit_record=None,
         )
@@ -110,9 +104,45 @@ class GuardedExecutor:
         ``run`` while bypassing this boundary.
         """
         with self.metrics.time("executor_validation_seconds"):
-            action = CanonicalAction.from_state(agent_state)
-            high_risk = self._is_high_risk(action)
-            if high_risk:
+            if self.state_machine.state in {FAULT, RECOVERING, COMPROMISED}:
+                reason = (
+                    f"Safety state {self.state_machine.state} prevents action execution"
+                )
+                try:
+                    audit_record = floor_block(reason, self.audit_log)["audit_record"]
+                except AuditWriteError:
+                    audit_record = None
+                    reason = f"{reason}; audit logging unavailable"
+                self.metrics.record_decision("BLOCK")
+                return GuardAction(
+                    decision="BLOCK",
+                    action=None,
+                    reason=reason,
+                    blocked=True,
+                    audit_record=audit_record,
+                )
+            try:
+                action = CanonicalAction.from_state(agent_state)
+            except SchemaError as exc:
+                try:
+                    result = floor_block(
+                        f"Invalid action schema: {exc}", self.guard.audit_log
+                    )
+                except AuditWriteError as audit_error:
+                    return self._audit_failure(
+                        CanonicalAction(type="unknown"), audit_error
+                    )
+                self.state_machine.floor_block(result["reason"])
+                self.metrics.record_decision("BLOCK")
+                return GuardAction(
+                    decision="BLOCK",
+                    action=None,
+                    reason=result["reason"],
+                    blocked=True,
+                    audit_record=result["audit_record"],
+                )
+            policy = evaluate_action_policy(agent_state)
+            if policy.mutating or action.risk_level == "high":
                 try:
                     self._ensure_audit_available()
                 except AuditWriteError as exc:
@@ -121,8 +151,6 @@ class GuardedExecutor:
         try:
             result = self.guard.observe(agent_state)
         except AuditWriteError as exc:
-            if not high_risk:
-                raise
             return self._audit_failure(action, exc)
 
         if result.decision == "BLOCK":

@@ -1,6 +1,10 @@
-from actions_v9 import forgetting_signal, knowledge_reduction
-from rd_guard_v9 import AgentState, IASFloor, RDGuard
-from risk_engine_v9 import bloat_score, combined_risk, drift_score, stall_score
+import warnings
+
+with warnings.catch_warnings(record=True):
+    warnings.simplefilter("always", DeprecationWarning)
+    from actions_v9 import forgetting_signal, knowledge_reduction
+    from rd_guard_v9 import AgentState, IASFloor, RDGuard
+    from risk_engine_v9 import bloat_score, combined_risk, drift_score, stall_score
 from demos.demo_v9_agent_loop import run_demo
 
 
@@ -88,7 +92,7 @@ def test_forgetting_signal_resets_drift_to_checkpoint_goal():
 
 
 def test_guard_recommends_replanning_for_repeated_actions_and_risk_is_bounded():
-    state = {"action_history": ["retry"] * 5, "stall_window": 5}
+    state = {"action": "replan", "action_history": ["retry"] * 5, "stall_window": 5}
     result = RDGuard().observe(state)
 
     assert result.decision == "REPLAN"

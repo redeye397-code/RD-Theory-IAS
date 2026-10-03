@@ -1,6 +1,8 @@
-# RD Theory V11.2.2
+# RD Theory V11.2.3
 
-**Support policy:** V11.2.2 is the supported version. V1–V9 are archived
+![Version](https://img.shields.io/badge/version-11.2.3-blue)
+
+**Support policy:** V11.2.3 is the supported version. V1–V9 are archived
 and available for reference only; their legacy import paths remain available
 with `DeprecationWarning` notices.
 
@@ -123,27 +125,25 @@ FAULT/RECOVERING --TAMPER_CONFIRMED--> COMPROMISED  (terminal)
 | * → BLOCKED | IASFloor, automatic | Yes | FLOOR_BLOCK audit record | No | resumes BLOCKED | independent per action | N/A |
 | BLOCKED → NORMAL | caller retries a compliant action | Yes | new action passes the floor | No | resumes BLOCKED | unbounded | N/A |
 | * → FAULT | system, automatic (e.g. audit unavailable, hardware fault) | No | FAULT record if audit available | Yes (to leave) | **resumes FAULT, not NORMAL** | N/A | N/A |
-| FAULT → RECOVERING | operator supplies checkpoint + single-use approval token | Yes | checkpoint SHA-256 hash match | Yes | consumed tokens/attempt count persist across restart | bounded (`max[...` |
-| RECOVERING → NORMAL | automatic, once checkpoint + approval verify | Yes | valid checkpoint + unused token | Yes | N/A | resets attempt counter | N/A |
+| FAULT → RECOVERING | operator supplies checkpoint + single-use approval token | Yes | checkpoint HMAC-SHA256 and signed token verify | Yes | consumed token IDs/attempt count persist across restart | bounded (`max_recovery_attempts`) | invalid checkpoints reject and count |
+| RECOVERING → NORMAL | automatic, once checkpoint + approval verify | Yes | valid checkpoint HMAC + unused token | Yes | N/A | resets attempt counter | N/A |
 | RECOVERING → FAULT | automatic, checkpoint fails verification | Yes | verification failure reason | Yes | resumes FAULT | counted toward the bound | caused by missing/deleted/corrupt checkpoin[...] |
 | FAULT/RECOVERING → COMPROMISED | attempts exceeded, or confirmed tamper | **No** | attempt count, or tamper attestation | Yes | resumes COMPROMISED, no self-recovery | none accepted | terminal[...] |
 
 Additional documented failure modes (see `_rd_state_machine.py` for the
 authoritative, machine-readable `TRANSITION_TABLE`):
 
-- **Audit-disk-full:** state transitions are never lost if the audit sink
-  raises while recording history (the machine degrades gracefully), but
-  `GuardedExecutor` proactively checks audit availability *before* running a
-  high-risk action and fails closed (blocks + enters `FAULT`) if the sink is
+- **Audit-disk-full:** `GuardedExecutor` checks audit availability before
+  running every mutating action and fails closed (blocks + enters `FAULT`) if the sink is
   unavailable.
 - **Corrupted / missing / deleted checkpoints:** `verify_checkpoint()`
-  returns `"missing"` for `None` and `"corrupt"` for anything lacking a
-  matching SHA-256 `data_hash`; either rejects the recovery attempt and
-  counts toward the bounded retry limit. V10.0 does not persist checkpoints
-  as separate files, so "deleted" and "missing" are the same case.
+  requires the `RD_CHECKPOINT_KEY` HMAC signature as well as the compatibility
+  `data_hash`; hash-only legacy checkpoints are rejected in strict mode. A
+  missing key fails closed. Failed verification counts toward the bounded
+  recovery-attempt limit.
 - **Replayed recovery approvals:** each approval token may only be consumed
-  once (`SafetyStateMachine.consumed_approvals`); reusing a token is rejected
-  with `REPLAYED_APPROVAL_REJECTED` and does not advance the state machine.
+  once (`SafetyStateMachine.consumed_approvals` stores token IDs); reusing a
+  token is rejected with `REPLAYED_APPROVAL_REJECTED`.
 - **Clock rollback:** any recovery request timestamped earlier than the last
   observed event is rejected with `CLOCK_ROLLBACK_DETECTED` before any other
   check runs, preventing a rolled-back clock from resurrecting a consumed
@@ -192,9 +192,9 @@ This estimates p95 `GuardedExecutor.execute()` latency over a rolling five
 minutes. Compare it with the validation and observation histograms to localize
 cost before making performance changes.
 
-## Run the V11.2.2 real-world app
+## Run the V11.2.3 real-world app
 
-`realworld.py` at the repository root is the V11.2.2 FastAPI entrypoint. It
+`realworld.py` at the repository root is the V11.2.3 FastAPI entrypoint. It
 imports from the `rd_guard` package layout below -- all of these files must be
 present (they are installed by `python -m pip install -e .`):
 
@@ -202,7 +202,12 @@ present (they are installed by `python -m pip install -e .`):
 rd_guard/
 ├── __init__.py                 # RDGuard, GuardAction (stable `from rd_guard import RDGuard`)
 └── v11/
-    ├── __init__.py
+    ├── __init__.py                 # __version__
+    ├── canonical.py                # shared action schema and normalization
+    ├── policy.py                   # default-deny read-only/mutating allowlists
+    ├── guard.py                    # shared policy decision
+    ├── checkpoint.py               # HMAC checkpoint sealing
+    ├── recovery.py                 # signed recovery approval tokens
     ├── config.py                # GuardConfig
     └── telemetry/
         ├── __init__.py
@@ -238,9 +243,15 @@ $port = if ($env:PORT) { $env:PORT } else { 8000 }
 uvicorn realworld:app --host 0.0.0.0 --port $port
 ```
 
-`GET /` reports `{"status": "V11.2.2 LIVE", ...}` once the server is running,
+`GET /` reports `{"status": "V11.2.3 LIVE", ...}` once the server is running,
 and `POST /check` with `{"data": {...}}` returns the guard's decision
-(`state`, `blocked`, `latency_ms`). If any of the files above are missing --
+(`state`, `blocked`, `latency_ms`, `request_id`). Unknown or ambiguous action
+types are blocked. `/check` accepts an optional `X-API-Key` configured with
+`RD_API_KEY`; requests are rate limited by client (`RD_RATE_LIMIT_PER_MIN`,
+default 120/minute) and capped at 8 KiB. When `RD_API_KEY` is unset, startup
+logs a warning and the endpoint remains unauthenticated.
+
+If any of the files above are missing --
 for example after a partial file copy into a fresh Codespace -- `realworld.py`
 raises an `ImportError` at startup naming the missing module and the fix
 (reinstall the package and confirm the `rd_guard/v11/` files exist), instead
@@ -252,22 +263,32 @@ production deployment ready. The metrics exporter is a separate listener:
 allow access only from trusted monitoring systems and keep it off public
 ingress.
 
-## V11.2.2 deployment hardening
+## V11.2.3 security hardening
 
-V11.2.2 is the supported hardening release on the V11 line. It preserves the
-stable V11 API and fail-closed enforcement model while focusing on production
-deployment boundaries, observability, startup diagnostics, and operator
-readiness:
+V11.2.3 preserves the stable V11 API and fail-closed enforcement model while
+hardening the action, recovery, checkpoint, and HTTP decision paths:
 
-- Review API and metrics network boundaries; restrict metrics to trusted
-  monitoring systems.
-- Use durable, append-only audit storage and verify that high-risk work fails
-  closed when audit writes fail.
-- Require named, independently authorized recovery operators and rehearse
-  checkpoint verification and recovery.
-- Verify startup logs, health checks, metrics scraping, alert routing, backup
-  restoration, and rollback procedures before enabling production traffic.
-- Measure latency under representative load before making optimizations.
+- Action types are normalized consistently and checked against explicit
+  read-only/mutating allowlists; unknown, ambiguous, and destructive actions
+  block by default and deny reasons are audited.
+- Recovery approvals use HMAC-SHA256 tokens scoped to `recovery`, expiring after
+  15 minutes by default (`issue_recovery_token(..., ttl=...)` can configure the
+  lifetime); checkpoints
+  use HMAC-SHA256 signatures from `RD_CHECKPOINT_KEY`. Configure a separate
+  secret of at least 32 bytes in `RD_RECOVERY_KEY`. Never store either key in
+  source control. Hash-only checkpoints from older versions are rejected.
+- `/check` supports `RD_API_KEY`, per-client rate limiting, an 8 KiB body cap,
+  sanitized request-ID-correlated logging, and request-ID response headers.
+- The CI workflow adds lint, type, dependency/security scans, a Python 3.10–3.12
+  test matrix, and Docker/Compose startup verification.
+- Set `RD_GUARD_METRICS_HOST=0.0.0.0` in container deployments to expose metrics
+  to the Compose network; outside containers the default is `127.0.0.1`.
+
+This remains a prototype, not a production-certified security boundary.
+`GuardedExecutor.run()` executes callbacks in-process and is not sandboxed. The
+default audit sink is process-local; production deployments must supply durable,
+tamper-evident audit storage and independently manage the signing keys. Do not
+rely on `/check` without setting `RD_API_KEY` in production.
 
 See the [production deployment guide](docs/deployment.md) and
 [Docker quickstart](docs/docker-quickstart.md) for operational setup.

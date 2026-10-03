@@ -4,13 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rd_theory"
-version = "11.2.2"
+version = "11.2.3"
 description = "RD Theory - Self-Limiting AI Safety Architecture"
 readme = "README.md"
 requires-python = ">=3.9"
-dependencies = [
-    "ecdsa",
-]
+dependencies = []
 
 [tool.setuptools]
 py-modules = [
@@ -38,7 +36,45 @@ py-modules = [
     "rd_platform_visualization",
     "demo_v3_sequence",
     "demo_v4_quad_locked",
+    "realworld",
 ]
 
 [tool.setuptools.packages.find]
 include = ["rd_guard", "rd_guard.*"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "error::DeprecationWarning",
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.:starlette.exceptions.StarletteDeprecationWarning",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = [
+    "actions_v9.py",
+    "rd_guard_v9.py",
+    "rd_platform_visualization.py",
+    "rd_theory_v5.py",
+    "rd_theory_v6.py",
+    "rd_theory_v7.py",
+    "rd_theory_v8.py",
+    "risk_engine_v9.py",
+    "tests/test_attestation.py",
+    "tests/test_chain_tamper.py",
+    "tests/test_poison_pill.py",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = true
+disallow_untyped_defs = false
+warn_redundant_casts = true
+warn_unused_configs = true
+files = ["rd_guard/v11", "realworld.py", "_rd_guard_executor.py", "_rd_state_machine.py"]
+explicit_package_bases = true

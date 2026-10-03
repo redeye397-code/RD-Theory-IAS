@@ -1,7 +1,7 @@
 """RD-Guard V10: the canonical agent-loop stability governor API."""
 
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, Optional, TypedDict, cast
 
 from _rd_guard_actions import floor_block, forgetting_signal, knowledge_reduction
 from _rd_guard_risk_engine import (
@@ -12,6 +12,7 @@ from _rd_guard_risk_engine import (
 )
 from _rd_metrics import DEFAULT_METRICS
 from rd_guard.v11.config import GuardConfig
+from rd_guard.v11.guard import evaluate_action_policy
 
 
 class AgentState(TypedDict, total=False):
@@ -60,7 +61,7 @@ class GuardAction:
     drift_score: float = 0.0
     stall_score: float = 0.0
     blocked: bool = False
-    audit_record: dict = None
+    audit_record: Optional[dict] = None
 
     @property
     def state(self):
@@ -72,79 +73,13 @@ class IASFloor:
     """Hard constraints for agent actions with direct safety implications."""
 
     def check(self, agent_state):
-        action = agent_state.get("action", agent_state.get("requested_action", ""))
-        action_fields = []
-        action_branch = ""
-        action_data = action if isinstance(action, dict) else None
-        if isinstance(action, dict):
-            action_branch = action.get("branch", "")
-            action_fields.extend(
-                action.get(key, "")
-                for key in (
-                    "type",
-                    "name",
-                    "target",
-                    "path",
-                    "resource",
-                    "command",
-                    "branch",
-                )
-            )
-            action = action.get("type", action.get("name", ""))
-        action_fields.extend(
-            agent_state.get(key, "")
-            for key in ("target", "path", "resource", "command")
-        )
-        action_text = " ".join(
-            str(value).lower().replace("-", "_").replace(" ", "_")
-            for value in (action, *action_fields)
-        )
-
-        if (
-            agent_state.get("deleting_tests")
-            or (
-                "test" in action_text
-                and any(
-                    word in action_text
-                    for word in ("delete", "remove", "rm_", "unlink", "erase", "drop")
-                )
-            )
-        ):
-            return "Deleting tests is prohibited by the IAS floor"
-
-        branch = str(agent_state.get("branch", action_branch)).lower()
-        branch = branch.rstrip("/").rsplit("/", 1)[-1]
-        pushes_main = "push" in action_text and (
-            "main" in action_text or branch == "main"
-        )
-        ci = agent_state.get("ci_passed", agent_state.get("ci", False))
-        if action_data is not None:
-            ci = agent_state.get(
-                "ci_passed",
-                agent_state.get("ci", action_data.get("ci_passed", False)),
-            )
-        if isinstance(ci, dict):
-            ci = ci.get("passed", False)
-        ci_passed = ci is True or (
-            isinstance(ci, str) and ci.strip().lower() in {"passed", "success", "green"}
-        )
-        if pushes_main and not ci_passed:
-            return "Pushing to main requires passing CI"
-
         if (
             agent_state.get("bypass_alignment")
             or agent_state.get("alignment_prompt_bypassed")
-            or any(
-                phrase in action_text
-                for phrase in (
-                    "bypass_alignment",
-                    "skip_alignment",
-                    "ignore_alignment",
-                )
-            )
         ):
             return "Bypassing alignment prompts is prohibited by the IAS floor"
-        return None
+        decision = evaluate_action_policy(agent_state)
+        return decision.reason if not decision.allowed else None
 
 
 class RDGuard:
@@ -215,8 +150,9 @@ class RDGuard:
             checkpoint = agent_state.get("checkpoint")
             if isinstance(checkpoint, dict):
                 restored = forgetting_signal(checkpoint)
-                agent_state.clear()
-                agent_state.update(restored)
+                mutable_state = cast(dict, agent_state)
+                mutable_state.clear()
+                mutable_state.update(restored)
             else:
                 original_goal = agent_state.get("original_goal")
                 if original_goal is not None:

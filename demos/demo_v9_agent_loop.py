@@ -19,7 +19,7 @@ def run_demo():
         "context_size": 0,
         "context_limit": 4,
         "action_history": [],
-        "action": "work",
+        "action": "noop",
     }
     outcomes = []
 
@@ -54,12 +54,12 @@ def run_demo():
             )
         )
         if result.decision == "FORGETTING_SIGNAL":
-            state["action"] = "work"
+            state["action"] = "noop"
         elif result.decision == "REPLAN":
             state["action_history"] = []
-            state["action"] = "work"
+            state["action"] = "noop"
         elif result.blocked:
-            state["action"] = "work"
+            state["action"] = "noop"
 
     return outcomes
 
