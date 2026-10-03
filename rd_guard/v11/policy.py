@@ -150,6 +150,8 @@ def classify_action(state):
         ci = state_data.get("ci_passed", state_data.get("ci", action_data.get("ci_passed", False)))
     elif action_data is not None and isinstance(getattr(action_data, "ci_passed", None), bool):
         ci = state_data.get("ci_passed", state_data.get("ci", action_data.ci_passed))
+    elif not isinstance(state, (dict, str)):
+        ci = getattr(state, "ci_passed", ci)
     if isinstance(ci, dict):
         ci = ci.get("passed", False)
     ci_passed = ci is True or (
