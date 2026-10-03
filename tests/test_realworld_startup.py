@@ -1,4 +1,4 @@
-"""Tests for the V11.2.2 real-world startup path (``realworld.py``).
+"""Tests for the V11.2.3 real-world startup path (``realworld.py``).
 
 These guard against the package-layout regression where ``rd_guard`` was a
 flat module and the V11 submodules it documents/imports --
@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.request import urlopen
 
 import pytest
+from fastapi.testclient import TestClient
 
 from _rd_metrics_server import stop_metrics_server
 
@@ -51,17 +52,16 @@ def test_rdguard_accepts_v11_config_and_evaluate_alias():
 
 
 def test_realworld_entrypoint_imports_and_serves_requests(monkeypatch):
-    fastapi_testclient = pytest.importorskip("fastapi.testclient")
     monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "false")
 
     realworld = importlib.import_module("realworld")
 
     realworld.app.state.metrics_server = None
-    client = fastapi_testclient.TestClient(realworld.app)
+    client = TestClient(realworld.app)
 
     root = client.get("/")
     assert root.status_code == 200
-    assert root.json()["status"] == "V11.2.2 LIVE"
+    assert root.json()["status"] == "V11.2.3 LIVE"
 
     allowed = client.post("/check", json={"data": {"action": "read_file"}})
     assert allowed.status_code == 200
@@ -75,7 +75,6 @@ def test_realworld_entrypoint_imports_and_serves_requests(monkeypatch):
 
 
 def test_realworld_reports_actionable_error_when_v11_layout_missing(monkeypatch):
-    pytest.importorskip("fastapi")
     import sys
 
     monkeypatch.setitem(sys.modules, "rd_guard.v11.config", None)
@@ -106,7 +105,6 @@ def test_realworld_reports_actionable_error_when_fastapi_is_missing(monkeypatch)
 
 
 def test_realworld_metrics_can_be_disabled(monkeypatch):
-    fastapi_testclient = pytest.importorskip("fastapi.testclient")
     realworld = importlib.import_module("realworld")
     monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "false")
     monkeypatch.setattr(realworld.DEFAULT_METRICS, "enabled", True)
@@ -116,7 +114,7 @@ def test_realworld_metrics_can_be_disabled(monkeypatch):
         lambda **kwargs: pytest.fail("metrics server should not start"),
     )
 
-    with fastapi_testclient.TestClient(realworld.app) as client:
+    with TestClient(realworld.app) as client:
         assert client.get("/").json()["metrics"] == "metrics disabled"
         assert client.post("/check", json={"data": {"action": "read_file"}}).json()[
             "blocked"
@@ -124,7 +122,6 @@ def test_realworld_metrics_can_be_disabled(monkeypatch):
 
 
 def test_realworld_skips_metrics_when_optional_client_is_unavailable(monkeypatch):
-    fastapi_testclient = pytest.importorskip("fastapi.testclient")
     realworld = importlib.import_module("realworld")
     monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "true")
     monkeypatch.setattr(realworld.DEFAULT_METRICS, "enabled", False)
@@ -134,19 +131,18 @@ def test_realworld_skips_metrics_when_optional_client_is_unavailable(monkeypatch
         lambda **kwargs: pytest.fail("metrics server should not start"),
     )
 
-    with fastapi_testclient.TestClient(realworld.app) as client:
+    with TestClient(realworld.app) as client:
         assert client.get("/").json()["metrics"] == "metrics disabled"
 
 
 def test_realworld_metrics_use_configured_host_and_port(monkeypatch):
-    fastapi_testclient = pytest.importorskip("fastapi.testclient")
     realworld = importlib.import_module("realworld")
     monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "true")
     monkeypatch.setenv("RD_GUARD_METRICS_HOST", "127.0.0.1")
     monkeypatch.setenv("RD_GUARD_METRICS_PORT", "0")
     monkeypatch.setattr(realworld.DEFAULT_METRICS, "enabled", True)
 
-    with fastapi_testclient.TestClient(realworld.app) as client:
+    with TestClient(realworld.app) as client:
         metrics_url = client.get("/").json()["metrics"]
         assert metrics_url.startswith("http://127.0.0.1:")
         with urlopen(metrics_url) as response:
@@ -157,13 +153,12 @@ def test_realworld_metrics_use_configured_host_and_port(monkeypatch):
 
     server = realworld.app.state.metrics_server
     importlib.reload(realworld)
-    with fastapi_testclient.TestClient(realworld.app):
+    with TestClient(realworld.app):
         assert realworld.app.state.metrics_server is server
     stop_metrics_server("127.0.0.1", 0)
 
 
 def test_realworld_metrics_port_conflict_does_not_stop_app(monkeypatch, caplog):
-    fastapi_testclient = pytest.importorskip("fastapi.testclient")
     realworld = importlib.import_module("realworld")
     monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "true")
     monkeypatch.setenv("RD_GUARD_METRICS_HOST", "127.0.0.1")
@@ -173,7 +168,7 @@ def test_realworld_metrics_port_conflict_does_not_stop_app(monkeypatch, caplog):
         occupied.bind(("127.0.0.1", 0))
         monkeypatch.setenv("RD_GUARD_METRICS_PORT", str(occupied.getsockname()[1]))
 
-        with fastapi_testclient.TestClient(realworld.app) as client:
+        with TestClient(realworld.app) as client:
             assert client.get("/").status_code == 200
             assert client.get("/").json()["metrics"] == "metrics unavailable"
             allowed = client.post("/check", json={"data": {"action": "read_file"}})
@@ -185,13 +180,12 @@ def test_realworld_metrics_port_conflict_does_not_stop_app(monkeypatch, caplog):
 
 
 def test_realworld_invalid_metrics_port_does_not_stop_app(monkeypatch, caplog):
-    fastapi_testclient = pytest.importorskip("fastapi.testclient")
     realworld = importlib.import_module("realworld")
     monkeypatch.setenv("RD_GUARD_METRICS_ENABLED", "true")
     monkeypatch.setenv("RD_GUARD_METRICS_PORT", "not-a-port")
     monkeypatch.setattr(realworld.DEFAULT_METRICS, "enabled", True)
 
-    with fastapi_testclient.TestClient(realworld.app) as client:
+    with TestClient(realworld.app) as client:
         assert client.get("/").status_code == 200
         assert client.get("/").json()["metrics"] == "metrics unavailable"
         allowed = client.post("/check", json={"data": {"action": "read_file"}})

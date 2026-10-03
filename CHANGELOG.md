@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 11.2.3 — October 3, 2026
+
+- Added shared Unicode-aware action normalization and default-deny allowlists;
+  all mutating actions require a healthy audit sink.
+- Replaced recovery approval strings with scoped, expiring, single-use
+  HMAC-SHA256 tokens and signed checkpoint seals using environment-managed keys.
+- Hardened `/check` with optional API-key authentication, per-client rate
+  limiting, an 8 KiB body cap, and request-ID-correlated audit/logging.
+- Added CI lint/type/dependency/security checks, Python-version test matrix,
+  Docker verification, and startup smoke tests; eliminated the conditional
+  metrics skip.
+- Removed the unused `ecdsa` runtime dependency after dependency auditing
+  identified a vulnerable version.
+
 ## 11.2.2 — October 2, 2026
 
 - Kept the stable V11 API and fail-closed enforcement model while making

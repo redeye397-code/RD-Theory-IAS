@@ -38,6 +38,22 @@ from rd_guard.v11.checkpoint import (
 )
 from rd_guard.v11.recovery import RecoveryTokenError, verify_recovery_token
 
+__all__ = [
+    "SafetyStateMachine",
+    "InvalidTransitionError",
+    "RecoveryError",
+    "TRANSITIONS",
+    "TRANSITION_TABLE",
+    "verify_checkpoint",
+    "seal_checkpoint",
+    "NORMAL",
+    "STABILIZING",
+    "BLOCKED",
+    "FAULT",
+    "RECOVERING",
+    "COMPROMISED",
+]
+
 
 NORMAL = "NORMAL"
 STABILIZING = "STABILIZING"
@@ -421,8 +437,16 @@ class SafetyStateMachine:
             self._transition("RECOVERY_FAILED", checkpoint_status=status)
             raise RecoveryError(f"CHECKPOINT_{status.upper()}")
 
-        self._transition("RECOVERY_REQUESTED")
-        self._transition("RECOVERY_SUCCEEDED")
+        self._transition(
+            "RECOVERY_REQUESTED",
+            operator=claims["operator"],
+            token_id=token_id,
+        )
+        self._transition(
+            "RECOVERY_SUCCEEDED",
+            operator=claims["operator"],
+            token_id=token_id,
+        )
         self.recovery_attempts = 0
         return checkpoint["data"]
 

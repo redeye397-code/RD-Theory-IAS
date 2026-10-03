@@ -8,7 +8,6 @@ from rd_executor import (
     COMPROMISED,
     FAULT,
     NORMAL,
-    RECOVERING,
     STABILIZING,
     InvalidTransitionError,
     RecoveryError,
@@ -151,7 +150,8 @@ def test_recovery_rejects_unsigned_operator_approval_token():
 
 
 def test_replayed_approval_token_is_rejected():
-    sm = SafetyStateMachine(audit_log=[])
+    audit_log = []
+    sm = SafetyStateMachine(audit_log=audit_log)
     sm.enter_fault("fault")
     checkpoint = seal_checkpoint({"a": 1})
     token = _approval(100.0)
@@ -162,6 +162,7 @@ def test_replayed_approval_token_is_rejected():
         sm.request_recovery(checkpoint, token, now=200.0)
 
     assert sm.state == FAULT
+    assert all(token not in repr(record) for record in audit_log)
 
 
 def test_clock_rollback_is_rejected_without_changing_state():
@@ -262,6 +263,9 @@ def test_expired_and_future_recovery_tokens_are_rejected(issued, ttl, observed, 
 
 
 def test_tampered_and_wrong_key_tokens_are_rejected():
+    import base64
+    import json
+
     sm = SafetyStateMachine(audit_log=[])
     sm.enter_fault("fault")
     token = _approval(100.0)
@@ -269,11 +273,56 @@ def test_tampered_and_wrong_key_tokens_are_rejected():
     with pytest.raises(RecoveryError, match="INVALID_APPROVAL_SIGNATURE"):
         sm.request_recovery(seal_checkpoint({"a": 1}), token[:-1] + replacement, now=100.0)
 
+    encoded, signature = token.split(".")
+    payload = json.loads(
+        base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+    )
+    payload["operator"] = "tampered-operator"
+    altered = base64.urlsafe_b64encode(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).rstrip(b"=").decode()
+    sm = SafetyStateMachine(audit_log=[])
+    sm.enter_fault("fault")
+    with pytest.raises(RecoveryError, match="INVALID_APPROVAL_SIGNATURE"):
+        sm.request_recovery(
+            seal_checkpoint({"a": 1}), f"{altered}.{signature}", now=100.0
+        )
+
     sm = SafetyStateMachine(audit_log=[])
     sm.enter_fault("fault")
     token = _approval(100.0, key=secrets.token_hex(32))
     with pytest.raises(RecoveryError, match="INVALID_APPROVAL_SIGNATURE"):
         sm.request_recovery(seal_checkpoint({"a": 1}), token, now=100.0)
+
+
+def test_wrong_scope_and_malformed_tokens_are_rejected():
+    import base64
+    import hashlib
+    import hmac
+    import json
+    import os
+
+    from rd_guard.v11.recovery import RecoveryTokenError, verify_recovery_token
+
+    encoded, _signature = _approval(100.0).split(".")
+    payload = json.loads(
+        base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+    )
+    payload["purpose"] = "other"
+    encoded = base64.urlsafe_b64encode(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).rstrip(b"=").decode()
+    key = os.environ["RD_RECOVERY_KEY"].encode()
+    signature = hmac.new(key, encoded.encode("ascii"), hashlib.sha256).digest()
+    token = f"{encoded}.{base64.urlsafe_b64encode(signature).rstrip(b'=').decode()}"
+
+    with pytest.raises(RecoveryTokenError, match="INVALID_APPROVAL_SCOPE"):
+        verify_recovery_token(token, now=100.0)
+    with pytest.raises(RecoveryTokenError, match="INVALID_APPROVAL_TOKEN"):
+        verify_recovery_token("not-a-signed-token", now=100.0)
+
+    claims = verify_recovery_token(_approval(100.0), now=100.0)
+    assert set(claims) >= {"operator", "jti", "iat", "exp", "purpose"}
 
 
 def test_missing_recovery_key_fails_closed(monkeypatch):
@@ -319,6 +368,18 @@ def test_missing_checkpoint_key_fails_closed(monkeypatch):
 
     with pytest.raises(ValueError, match="RD_CHECKPOINT_KEY is missing or too short"):
         verify_checkpoint(checkpoint)
+
+
+def test_short_signing_keys_fail_closed(monkeypatch):
+    from rd_guard.v11.recovery import RecoveryTokenError
+
+    monkeypatch.setenv("RD_RECOVERY_KEY", "weak")
+    monkeypatch.setenv("RD_CHECKPOINT_KEY", "weak")
+
+    with pytest.raises(RecoveryTokenError, match="RD_RECOVERY_KEY is missing or too short"):
+        _approval(100.0)
+    with pytest.raises(ValueError, match="RD_CHECKPOINT_KEY is missing or too short"):
+        seal_checkpoint({"a": 1})
 
 
 def test_audit_write_failure_does_not_crash_transitions():

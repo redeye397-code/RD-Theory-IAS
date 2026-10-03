@@ -5,6 +5,7 @@ from urllib.error import HTTPError
 from urllib.request import urlopen
 
 import pytest
+import prometheus_client
 
 from _rd_metrics import PrometheusMetrics
 from _rd_metrics_server import start_metrics_server, stop_metrics_server
@@ -77,7 +78,6 @@ def test_metrics_http_server_closes_stale_listener_before_replacing():
 
 
 def test_metrics_http_server_exposes_prometheus_samples():
-    prometheus_client = pytest.importorskip("prometheus_client")
     metrics = PrometheusMetrics(registry=prometheus_client.CollectorRegistry())
     metrics.record_decision("ALLOW")
     server = start_metrics_server("127.0.0.1", 0, metrics)
@@ -90,7 +90,6 @@ def test_metrics_http_server_exposes_prometheus_samples():
 
 
 def test_default_prometheus_wrapper_uses_a_non_colliding_registry():
-    pytest.importorskip("prometheus_client")
     first = PrometheusMetrics()
     second = PrometheusMetrics()
     first.record_decision("ALLOW")
@@ -117,7 +116,6 @@ def test_grafana_dashboard_is_valid_json():
 
 
 def test_prometheus_metrics_record_guard_state_executor_and_vault(tmp_path):
-    prometheus_client = pytest.importorskip("prometheus_client")
     registry = prometheus_client.CollectorRegistry()
     metrics = PrometheusMetrics(registry=registry)
     guard = RDGuard(metrics=metrics)

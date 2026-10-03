@@ -14,6 +14,9 @@ MUTATING_ACTIONS = frozenset(
 DESTRUCTIVE_ACTIONS = frozenset(
     {"delete", "drop", "erase", "purge", "remove", "rm", "rmtree", "shred", "truncate", "unlink", "wipe"}
 )
+_MUTATING_VERBS = frozenset(
+    {"commit", "create", "edit", "mkdir", "publish", "push", "update", "write"}
+)
 
 _CONFUSABLES = str.maketrans(
     {
@@ -45,22 +48,45 @@ def _strings(value):
     if isinstance(value, str):
         yield value
     elif isinstance(value, dict):
-        for nested in value.values():
+        for key, nested in value.items():
+            if isinstance(key, str):
+                yield key
             yield from _strings(nested)
     elif isinstance(value, (list, tuple)):
         for nested in value:
             yield from _strings(nested)
 
 
+def _has_command(value):
+    if isinstance(value, dict):
+        return any(
+            (key == "command" and bool(command))
+            or _has_command(command)
+            for key, command in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_has_command(item) for item in value)
+    if isinstance(getattr(value, "command", None), str):
+        return bool(value.command.strip())
+    return False
+
+
 def _action_parts(state):
     if isinstance(state, dict):
         raw = state.get("action", state.get("requested_action"))
+        raw_type = getattr(raw, "type", None)
         fields = [state.get(key, "") for key in ("target", "path", "resource", "command", "branch")]
         if isinstance(raw, dict):
             fields.extend(raw.values())
             action_type = raw.get("type", raw.get("name"))
         elif isinstance(raw, str):
             action_type = raw
+        elif isinstance(raw_type, str):
+            fields.extend(
+                getattr(raw, key, "")
+                for key in ("target", "path", "resource", "command", "branch")
+            )
+            action_type = raw_type
         else:
             action_type = None
         return action_type, fields, state
@@ -85,11 +111,10 @@ def classify_action(state):
 
     texts = [normalize_action_name(item) for item in _strings([action_type, fields])]
     tokens = {token for text in texts for token in text.split("_") if token}
-    if normalized in DESTRUCTIVE_ACTIONS or tokens.intersection(DESTRUCTIVE_ACTIONS):
-        return "DENY", f"Destructive action is prohibited: {normalized}"
-
     if ({"test", "tests"} & tokens) and tokens.intersection(DESTRUCTIVE_ACTIONS):
         return "DENY", "Deleting tests is prohibited by the IAS floor"
+    if normalized in DESTRUCTIVE_ACTIONS or tokens.intersection(DESTRUCTIVE_ACTIONS):
+        return "DENY", f"Destructive action is prohibited: {normalized}"
 
     if tokens.intersection({"bypass", "skip", "ignore"}) and "alignment" in tokens:
         return "DENY", "Bypassing alignment prompts is prohibited by the IAS floor"
@@ -101,6 +126,11 @@ def classify_action(state):
     )
     if category is None:
         return "DENY", f"Unknown action type is blocked by default: {normalized}"
+    if category == "READ_ONLY":
+        if _has_command(state):
+            return "DENY", "Read-only action cannot carry a command"
+        if tokens.intersection(_MUTATING_VERBS):
+            return "DENY", "Read-only action contains a mutating operation"
 
     action_data = (
         state.get("action", state.get("requested_action"))
@@ -118,6 +148,8 @@ def classify_action(state):
     ci = state_data.get("ci_passed", state_data.get("ci", False))
     if isinstance(action_data, dict):
         ci = state_data.get("ci_passed", state_data.get("ci", action_data.get("ci_passed", False)))
+    elif action_data is not None and isinstance(getattr(action_data, "ci_passed", None), bool):
+        ci = state_data.get("ci_passed", state_data.get("ci", action_data.ci_passed))
     if isinstance(ci, dict):
         ci = ci.get("passed", False)
     ci_passed = ci is True or (

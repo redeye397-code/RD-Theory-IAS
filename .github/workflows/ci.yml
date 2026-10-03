@@ -1,23 +1,69 @@
-name: V10 CI
-on: [push, pull_request]
+name: V11 CI - Hardened
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
 jobs:
-  test:
+  quality:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install requirements
-        timeout-minutes: 10
-        run: pip install -r requirements.txt
-      - name: Install package (editable)
-        timeout-minutes: 10
-        run: python -m pip install -e .
-      - name: Run pytest
-        timeout-minutes: 10
-        run: pytest tests/ -v
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - name: Install package and development tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -e .
+      - name: Ruff
+        run: ruff check .
+      - name: Mypy
+        run: mypy
+      - name: Bandit
+        run: bandit -r rd_guard _rd_guard_actions.py _rd_guard_executor.py _rd_guard_schema.py _rd_state_machine.py rd_executor.py realworld.py -ll
+      - name: Dependency audit
+        run: pip-audit -r requirements-dev.txt
+      - name: Pytest
+        run: >-
+          pytest tests/ -v
+          -W error::DeprecationWarning
+          -W "ignore:Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.:starlette.exceptions.StarletteDeprecationWarning"
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t rd-theory:v11.2.3 .
+      - name: Validate Compose configuration
+        run: docker compose config -q
+      - name: Start app with Compose
+        run: docker compose up --build -d
+      - name: Smoke test app
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/ | grep -q 'V11.2.3 LIVE'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs app
+          exit 1
+      - name: Stop Compose services
+        if: always()
+        run: docker compose down

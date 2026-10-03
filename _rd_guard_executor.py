@@ -10,10 +10,10 @@ machine transitions to ``FAULT``.
 
 from _rd_guard_actions import AuditSink, AuditWriteError, floor_block
 from _rd_guard_schema import CanonicalAction, SchemaError
-from _rd_state_machine import SafetyStateMachine
+from _rd_state_machine import COMPROMISED, FAULT, RECOVERING, SafetyStateMachine
 from rd_guard import GuardAction, RDGuard
 from rd_guard.v11.guard import evaluate_action_policy
-from rd_guard.v11.policy import DESTRUCTIVE_ACTIONS, normalize_action_name
+from rd_guard.v11.policy import DESTRUCTIVE_ACTIONS
 from _rd_metrics import DEFAULT_METRICS
 
 
@@ -104,6 +104,23 @@ class GuardedExecutor:
         ``run`` while bypassing this boundary.
         """
         with self.metrics.time("executor_validation_seconds"):
+            if self.state_machine.state in {FAULT, RECOVERING, COMPROMISED}:
+                reason = (
+                    f"Safety state {self.state_machine.state} prevents action execution"
+                )
+                try:
+                    audit_record = floor_block(reason, self.audit_log)["audit_record"]
+                except AuditWriteError:
+                    audit_record = None
+                    reason = f"{reason}; audit logging unavailable"
+                self.metrics.record_decision("BLOCK")
+                return GuardAction(
+                    decision="BLOCK",
+                    action=None,
+                    reason=reason,
+                    blocked=True,
+                    audit_record=audit_record,
+                )
             try:
                 action = CanonicalAction.from_state(agent_state)
             except SchemaError as exc:

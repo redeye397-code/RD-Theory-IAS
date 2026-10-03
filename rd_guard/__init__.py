@@ -1,7 +1,7 @@
 """RD-Guard V10: the canonical agent-loop stability governor API."""
 
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, Optional, TypedDict, cast
 
 from _rd_guard_actions import floor_block, forgetting_signal, knowledge_reduction
 from _rd_guard_risk_engine import (
@@ -61,7 +61,7 @@ class GuardAction:
     drift_score: float = 0.0
     stall_score: float = 0.0
     blocked: bool = False
-    audit_record: dict = None
+    audit_record: Optional[dict] = None
 
     @property
     def state(self):
@@ -150,8 +150,9 @@ class RDGuard:
             checkpoint = agent_state.get("checkpoint")
             if isinstance(checkpoint, dict):
                 restored = forgetting_signal(checkpoint)
-                agent_state.clear()
-                agent_state.update(restored)
+                mutable_state = cast(dict, agent_state)
+                mutable_state.clear()
+                mutable_state.update(restored)
             else:
                 original_goal = agent_state.get("original_goal")
                 if original_goal is not None:
