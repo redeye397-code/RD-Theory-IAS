@@ -1,6 +1,7 @@
-"""RD Guard V11 supporting package: configuration and telemetry helpers.
+"""RD Guard V11 supporting package: policy, state, and telemetry helpers.
 
-This package backs the stable ``rd_guard.v11.config`` and
-``rd_guard.v11.telemetry.logging`` import paths used by the V11.2.2
-real-world entrypoint (``realworld.py``) and documented in the README.
+This package backs the stable V11 import paths used by ``realworld.py`` and
+exposes the current supported package version.
 """
+
+__version__ = "11.2.3"

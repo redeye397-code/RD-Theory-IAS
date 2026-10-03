@@ -1,6 +1,7 @@
 """Tests for the explicit V10.0 safety state machine (``SafetyStateMachine``)."""
 
 import pytest
+import secrets
 
 from rd_executor import (
     BLOCKED,
@@ -17,6 +18,11 @@ from rd_executor import (
     seal_checkpoint,
     verify_checkpoint,
 )
+from rd_guard.v11.recovery import issue_recovery_token
+
+
+def _approval(now, ttl=900, key=None):
+    return issue_recovery_token("test-operator", key=key, ttl=ttl, now=now)
 
 
 REQUIRED_TRANSITION_FIELDS = (
@@ -98,7 +104,9 @@ def test_enter_fault_records_repeated_triggers_instead_of_dropping_them():
 def test_invalid_transition_raises():
     sm = SafetyStateMachine(audit_log=[])
     with pytest.raises(InvalidTransitionError):
-        sm.request_recovery(seal_checkpoint({"a": 1}), "tok", now=1.0)
+        sm.request_recovery(
+            seal_checkpoint({"a": 1}), _approval(1.0), now=1.0
+        )
 
 
 def test_recovery_succeeds_with_valid_checkpoint_and_fresh_approval():
@@ -106,7 +114,7 @@ def test_recovery_succeeds_with_valid_checkpoint_and_fresh_approval():
     sm.enter_fault("fault")
     checkpoint = seal_checkpoint({"goal": "safe-state"})
 
-    restored = sm.request_recovery(checkpoint, "approval-1", now=100.0)
+    restored = sm.request_recovery(checkpoint, _approval(100.0), now=100.0)
 
     assert restored == {"goal": "safe-state"}
     assert sm.state == NORMAL
@@ -126,17 +134,17 @@ def test_recovery_rejects_missing_or_corrupt_checkpoints(checkpoint, expected_st
     sm.enter_fault("fault")
 
     with pytest.raises(RecoveryError, match=f"CHECKPOINT_{expected_status.upper()}"):
-        sm.request_recovery(checkpoint, "approval-1", now=100.0)
+        sm.request_recovery(checkpoint, _approval(100.0), now=100.0)
 
     assert sm.state == FAULT
     assert verify_checkpoint(checkpoint) == expected_status
 
 
-def test_recovery_requires_operator_approval_token():
+def test_recovery_rejects_unsigned_operator_approval_token():
     sm = SafetyStateMachine(audit_log=[])
     sm.enter_fault("fault")
 
-    with pytest.raises(RecoveryError, match="OPERATOR_APPROVAL_REQUIRED"):
+    with pytest.raises(RecoveryError, match="INVALID_APPROVAL_TOKEN"):
         sm.request_recovery(seal_checkpoint({"a": 1}), "", now=100.0)
 
     assert sm.state == FAULT
@@ -146,11 +154,12 @@ def test_replayed_approval_token_is_rejected():
     sm = SafetyStateMachine(audit_log=[])
     sm.enter_fault("fault")
     checkpoint = seal_checkpoint({"a": 1})
-    sm.request_recovery(checkpoint, "reuse-me", now=100.0)
+    token = _approval(100.0)
+    sm.request_recovery(checkpoint, token, now=100.0)
 
     sm.enter_fault("fault-again")
     with pytest.raises(RecoveryError, match="REPLAYED_APPROVAL_REJECTED"):
-        sm.request_recovery(checkpoint, "reuse-me", now=200.0)
+        sm.request_recovery(checkpoint, token, now=200.0)
 
     assert sm.state == FAULT
 
@@ -158,11 +167,15 @@ def test_replayed_approval_token_is_rejected():
 def test_clock_rollback_is_rejected_without_changing_state():
     sm = SafetyStateMachine(audit_log=[])
     sm.enter_fault("fault")
-    sm.request_recovery(seal_checkpoint({"a": 1}), "tok-1", now=1000.0)
+    sm.request_recovery(
+        seal_checkpoint({"a": 1}), _approval(1000.0), now=1000.0
+    )
 
     sm.enter_fault("fault-again")
     with pytest.raises(RecoveryError, match="CLOCK_ROLLBACK_DETECTED"):
-        sm.request_recovery(seal_checkpoint({"a": 1}), "tok-2", now=500.0)
+        sm.request_recovery(
+            seal_checkpoint({"a": 1}), _approval(500.0), now=500.0
+        )
 
     assert sm.state == FAULT
 
@@ -173,11 +186,12 @@ def test_repeated_failed_recovery_attempts_escalate_to_compromised():
 
     for index in range(sm.max_recovery_attempts):
         with pytest.raises(RecoveryError, match="CHECKPOINT_MISSING"):
-            sm.request_recovery(None, f"tok-{index}", now=100.0 + index)
+            timestamp = 100.0 + index
+            sm.request_recovery(None, _approval(timestamp), now=timestamp)
         assert sm.state == FAULT
 
     with pytest.raises(RecoveryError, match="RECOVERY_ATTEMPTS_EXCEEDED"):
-        sm.request_recovery(None, "tok-final", now=200.0)
+        sm.request_recovery(None, _approval(200.0), now=200.0)
 
     assert sm.state == COMPROMISED
 
@@ -187,20 +201,35 @@ def test_compromised_state_rejects_further_recovery():
     sm.enter_fault("fault")
     for index in range(sm.max_recovery_attempts + 1):
         try:
-            sm.request_recovery(None, f"tok-{index}", now=100.0 + index)
+            timestamp = 100.0 + index
+            sm.request_recovery(None, _approval(timestamp), now=timestamp)
         except RecoveryError:
             pass
     assert sm.state == COMPROMISED
 
     with pytest.raises(InvalidTransitionError):
-        sm.request_recovery(seal_checkpoint({"a": 1}), "tok-new", now=500.0)
+        sm.request_recovery(
+            seal_checkpoint({"a": 1}), _approval(500.0), now=500.0
+        )
+
+
+def test_compromised_state_remains_terminal_after_restart():
+    sm = SafetyStateMachine(audit_log=[], state=COMPROMISED)
+    restarted = SafetyStateMachine.from_dict(sm.to_dict(), audit_log=[])
+
+    with pytest.raises(InvalidTransitionError):
+        restarted.request_recovery(
+            seal_checkpoint({"a": 1}), _approval(500.0), now=500.0
+        )
+    assert restarted.state == COMPROMISED
 
 
 def test_restart_resumes_from_persisted_state_not_normal():
     sm = SafetyStateMachine(audit_log=[])
     sm.enter_fault("fault")
     checkpoint = seal_checkpoint({"a": 1})
-    sm.request_recovery(checkpoint, "consumed-token", now=100.0)
+    token = _approval(100.0)
+    sm.request_recovery(checkpoint, token, now=100.0)
     sm.enter_fault("fault-again")
 
     persisted = sm.to_dict()
@@ -210,7 +239,86 @@ def test_restart_resumes_from_persisted_state_not_normal():
     # A restart must not reset the recovery-attempt counter or forget which
     # approval tokens were already consumed (replay protection survives it).
     with pytest.raises(RecoveryError, match="REPLAYED_APPROVAL_REJECTED"):
-        restarted.request_recovery(checkpoint, "consumed-token", now=200.0)
+        restarted.request_recovery(checkpoint, token, now=200.0)
+
+
+@pytest.mark.parametrize(
+    ("issued", "ttl", "observed", "message"),
+    [
+        (100.0, 10, 111.0, "APPROVAL_EXPIRED"),
+        (200.0, 10, 100.0, "APPROVAL_NOT_YET_VALID"),
+    ],
+)
+def test_expired_and_future_recovery_tokens_are_rejected(issued, ttl, observed, message):
+    sm = SafetyStateMachine(audit_log=[])
+    sm.enter_fault("fault")
+    with pytest.raises(RecoveryError, match=message):
+        sm.request_recovery(
+            seal_checkpoint({"a": 1}),
+            _approval(issued, ttl=ttl),
+            now=observed,
+        )
+    assert sm.recovery_attempts == 1
+
+
+def test_tampered_and_wrong_key_tokens_are_rejected():
+    sm = SafetyStateMachine(audit_log=[])
+    sm.enter_fault("fault")
+    token = _approval(100.0)
+    replacement = "A" if token[-1] != "A" else "B"
+    with pytest.raises(RecoveryError, match="INVALID_APPROVAL_SIGNATURE"):
+        sm.request_recovery(seal_checkpoint({"a": 1}), token[:-1] + replacement, now=100.0)
+
+    sm = SafetyStateMachine(audit_log=[])
+    sm.enter_fault("fault")
+    token = _approval(100.0, key=secrets.token_hex(32))
+    with pytest.raises(RecoveryError, match="INVALID_APPROVAL_SIGNATURE"):
+        sm.request_recovery(seal_checkpoint({"a": 1}), token, now=100.0)
+
+
+def test_missing_recovery_key_fails_closed(monkeypatch):
+    sm = SafetyStateMachine(audit_log=[])
+    sm.enter_fault("fault")
+    token = _approval(100.0)
+    monkeypatch.delenv("RD_RECOVERY_KEY")
+
+    with pytest.raises(RecoveryError, match="RD_RECOVERY_KEY is missing or too short"):
+        sm.request_recovery(seal_checkpoint({"a": 1}), token, now=100.0)
+
+    assert sm.state == FAULT
+    assert sm.recovery_attempts == 1
+
+
+def test_checkpoint_hmac_rejects_recomputed_plain_hash():
+    import hashlib
+
+    from _rd_vault_core import canonical
+
+    checkpoint = seal_checkpoint({"a": 1})
+    checkpoint["data"] = {"a": "attacker replacement"}
+    checkpoint["data_hash"] = hashlib.sha256(canonical(checkpoint["data"]).encode()).hexdigest()
+
+    assert verify_checkpoint(checkpoint) == "corrupt"
+
+
+def test_hash_only_legacy_checkpoint_is_rejected():
+    import hashlib
+
+    from _rd_vault_core import canonical
+
+    checkpoint = {
+        "data": {"a": 1},
+        "data_hash": hashlib.sha256(canonical({"a": 1}).encode()).hexdigest(),
+    }
+    assert verify_checkpoint(checkpoint) == "corrupt"
+
+
+def test_missing_checkpoint_key_fails_closed(monkeypatch):
+    checkpoint = seal_checkpoint({"a": 1})
+    monkeypatch.delenv("RD_CHECKPOINT_KEY")
+
+    with pytest.raises(ValueError, match="RD_CHECKPOINT_KEY is missing or too short"):
+        verify_checkpoint(checkpoint)
 
 
 def test_audit_write_failure_does_not_crash_transitions():

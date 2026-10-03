@@ -14,6 +14,7 @@ action.
 
 from _rd_guard_executor import GuardedExecutor, HIGH_RISK_KEYWORDS
 from _rd_guard_schema import CanonicalAction, SchemaError
+from rd_guard.v11.recovery import issue_recovery_token
 from _rd_state_machine import (
     BLOCKED,
     COMPROMISED,
@@ -42,6 +43,7 @@ __all__ = [
     "RecoveryError",
     "verify_checkpoint",
     "seal_checkpoint",
+    "issue_recovery_token",
     "NORMAL",
     "STABILIZING",
     "BLOCKED",
