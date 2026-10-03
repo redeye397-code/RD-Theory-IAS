@@ -57,15 +57,24 @@ def verify_recovery_token(token, now=None, key=None):
         raise RecoveryTokenError("INVALID_APPROVAL_TOKEN")
     encoded, supplied_signature = token.split(".", 1)
     try:
-        signature = _decode(supplied_signature)
+        encoded.encode("ascii")
+        supplied_signature.encode("ascii")
+    except UnicodeEncodeError:
+        raise RecoveryTokenError("INVALID_APPROVAL_TOKEN") from None
+    expected_signature = _encode(
+        hmac.new(_signing_key(key), encoded.encode("ascii"), hashlib.sha256).digest()
+    )
+    # Compare the canonical encoded strings: base64 decoding is lenient about the
+    # unused trailing bits of the final character, so comparing decoded bytes
+    # would accept a tampered (non-canonical) signature.
+    if not hmac.compare_digest(
+        supplied_signature.encode("ascii"), expected_signature.encode("ascii")
+    ):
+        raise RecoveryTokenError("INVALID_APPROVAL_SIGNATURE")
+    try:
         payload = json.loads(_decode(encoded))
     except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
         raise RecoveryTokenError("INVALID_APPROVAL_TOKEN") from None
-    expected_signature = hmac.new(
-        _signing_key(key), encoded.encode("ascii"), hashlib.sha256
-    ).digest()
-    if not hmac.compare_digest(signature, expected_signature):
-        raise RecoveryTokenError("INVALID_APPROVAL_SIGNATURE")
     if not isinstance(payload, dict):
         raise RecoveryTokenError("INVALID_APPROVAL_TOKEN")
     required = ("operator", "jti", "iat", "exp", "purpose")
